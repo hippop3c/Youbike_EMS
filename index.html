@@ -4,11 +4,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<meta name="description" content="智慧維護調度：依責任區、目前位置與行車時間預算規劃維修派工路徑。">
+<meta name="description" content="維護派工：依責任分區、目前位置與行車時間預算規劃維修派工路徑。">
 <meta name="theme-color" content="#f4ca00">
 <meta name="color-scheme" content="light">
 <meta name="format-detection" content="telephone=no">
-<title>智慧維護調度 — 派工規劃</title>
+<title>維護派工</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -125,7 +125,7 @@ header .clock{font-variant-numeric:tabular-nums;font-weight:700;font-size:.9rem}
 </head>
 <body>
 <div class="wrap">
-  <header><h1>智慧維護調度</h1><div class="clock" id="clock" aria-label="目前時間"></div></header>
+  <header><h1>維護派工</h1><div class="clock" id="clock" aria-label="目前時間"></div></header>
   <noscript><div class="card noscript">此系統需要啟用 JavaScript 才能進行派工規劃。</div></noscript>
 
   <!-- 監控上傳 -->
@@ -134,7 +134,7 @@ header .clock{font-variant-numeric:tabular-nums;font-weight:700;font-size:.9rem}
     <div class="mon-body" id="monBody">
       <div class="up-drop" id="upDrop">
         <div class="big">點此上傳 派工總表.xlsx</div>
-        <div class="sub">讀「2.0派工總表」→ 依區域代號歸四大責任區 → 推送給全區同仁</div>
+        <div class="sub">讀「2.0派工總表」→ 依區域代號分派至各責任分區 → 推送給同區同仁</div>
         <input type="file" id="fileIn" accept=".xlsx,.xls" style="display:none">
       </div>
       <div class="up-status" id="upStatus" aria-live="polite"></div>
@@ -156,7 +156,7 @@ header .clock{font-variant-numeric:tabular-nums;font-weight:700;font-size:.9rem}
   <section id="scrForm">
     <div class="card">
       <div class="fld"><label for="empId">員工編號<span class="req">＊</span></label><input id="empId" autocomplete="off" placeholder="例:A12345" aria-required="true"></div>
-      <div class="fld"><label for="zoneSel">責任區<span class="req">＊</span></label><select id="zoneSel" aria-required="true"></select></div>
+      <div class="fld"><label for="zoneSel">責任分區<span class="req">＊</span></label><select id="zoneSel" aria-required="true"></select></div>
       <div class="fld"><label for="truckId">車號 / 車牌<span class="req">＊</span></label><input id="truckId" autocomplete="off" placeholder="例:KEA-1234" aria-required="true"></div>
       <div class="fld"><label for="locInput">目前地點<span class="req">＊</span></label>
         <div class="loc-row"><input id="locInput" list="stList" autocomplete="off" placeholder="輸入場站名稱 或 緯度,經度" aria-required="true"><button class="gps-btn" id="gpsBtn" type="button" aria-label="使用目前位置定位">📍 定位</button></div>
@@ -195,12 +195,13 @@ header .clock{font-variant-numeric:tabular-nums;font-weight:700;font-size:.9rem}
 <script>
 /* ═══ 區域對照(可調) ═══ */
 const ZONE_INFO={G1:['中和區','和平'],G2:['永和區','和平'],K1:['板橋區','和平'],K2:['土城區','和平'],
-B0:['台大校內外','新店'],B1:['大安區','新店'],B2:['文山區','新店'],J:['新店坪林石碇深坑烏來','新店'],
-C1:['大同區','蘆洲'],D1:['萬華區','蘆洲'],D2:['中正區','蘆洲'],H:['蘆洲五股','蘆洲'],H1:['三重區','蘆洲'],H2:['林口八里','蘆洲'],
-E1:['士林區','洲美'],E2:['北投區','洲美'],L:['淡水石門三芝','洲美'],
-A2:['南港區','汐止'],F:['金山萬里汐止','汐止'],N:['瑞芳平溪雙溪貢寮','汐止'],
+B0:['台大校內外','新店'],B1:['大安區','新店'],B2:['文山區','新店'],J:['新店分區（坪林、石碇、深坑、烏來、新店）','新店'],
+C1:['大同區','蘆洲'],D1:['萬華區','蘆洲'],D2:['中正區','蘆洲'],H:['蘆洲區(五股)','蘆洲'],H1:['三重區','蘆洲'],H2:['林口分區（林口、八里）','蘆洲'],
+E1:['士林區','洲美'],E2:['北投區','洲美'],L:['淡水分區（石門、三芝、淡水）','洲美'],
+A2:['南港區','汐止'],F:['七星分區（金山、萬里、汐止）','汐止'],N:['瑞芳分區（瑞芳、平溪、雙溪、貢寮）','汐止'],
 C2:['中山區','瑞光'],A3:['內湖區','瑞光'],A1:['信義區','瑞光'],C3:['松山區','瑞光'],
-I:['新莊區','新莊'],M:['樹林三峽鶯歌','新莊']};
+I:['新莊區','新莊'],M:['樹三鶯區(樹林、三峽、鶯歌)','新莊']};
+const ZONE_ORDER=['G1','G2','K1','K2','B0','B1','B2','J','C1','D1','D2','E1','E2','L','A2','F','N','C2','A3','A1','C3','H','H1','H2','I','M'];
 const DEPOT_BIG={洲美:'北',汐止:'北',瑞光:'東',蘆洲:'西',新莊:'西',新店:'南',和平:'南'};
 const BIG_ORDER=['北','東','南','西'];
 const BIG_LABEL={北:'北區',東:'東區',南:'南區',西:'西區'};
@@ -262,6 +263,7 @@ async function loadRouteMatrix(startRec,nodes){
 /* ═══ 工單資料層(GAS ?wo / 內建 / localStorage) ═══ */
 let WO=[];
 function classify(zc){const zi=ZONE_INFO[zc];if(!zi)return{area:'未分類',depot:'其他',big:'其他'};return{area:zi[0],depot:zi[1],big:DEPOT_BIG[zi[1]]||'其他'};}
+function zoneLabel(zone){const zi=ZONE_INFO[zone];return zi?`${zone}｜${zi[0]}`:zone;}
 async function loadWorkorders(){
   if(SYNC_URL){try{const a=await fetchJsonWithTimeout(makeSyncUrl({wo:1,t:Date.now()}),{},15000);
     if(Array.isArray(a)&&a.length){WO=a;return 'gas';}}catch(e){}}
@@ -366,7 +368,7 @@ const APP={pos:null,posLabel:'',emp:'',truck:'',zone:'',t:0,sol:null,idx:0,cum:0
 /* ═══ 站點聚合 + 採集式路徑(orienteering) ═══ */
 function clusterStations(zone,claimed){
   const m=new Map();
-  WO.forEach(x=>{if(x.big!==zone||x.la==null)return;if(claimed&&claimed.has(x.bike))return;
+  WO.forEach(x=>{if(x.zc!==zone||x.la==null)return;if(claimed&&claimed.has(x.bike))return;
     const k=x.code||x.st;if(!m.has(k))m.set(k,{code:x.code,st:x.st,la:x.la,lo:x.lo,items:[]});m.get(k).items.push(x);});
   return [...m.values()].map(n=>{n.q=n.items.length;
     n.prio=n.items.reduce((s,it)=>s+(/優先|60天以上|維修通報|客服/.test((it.why||'')+(it.src||''))?1:0),0);return n;});
@@ -411,7 +413,7 @@ function renderFeed(){
       `<span>${a.emp}${a.truck?'/'+a.truck:''}${me}</span><span class="ftime">${tHM(a.doneTs||a.ts)}</span></div>${route}</li>`;}).join('');
   const stale=APP.sol&&claimSig(APP.acts)!==APP.claimSig;
   const note=stale?'⚠️ 有新動態,建議重算':'';
-  box.innerHTML=`<div class="feed"><div class="feed-h"><span>同區動態 ${BIG_LABEL[APP.zone]||APP.zone}</span>`+
+  box.innerHTML=`<div class="feed"><div class="feed-h"><span>同區動態 ${zoneLabel(APP.zone)}</span>`+
     `<span class="note">${note}</span><a id="rptBtn">＋回報單台完成</a></div>`+
     `<div class="rpt hide" id="rptForm"><div class="row">`+
     `<input class="r-st" id="rptBike" placeholder="車號" autocomplete="off"><input class="r-st" id="rptStn" list="stList" placeholder="場站" autocomplete="off"></div>`+
@@ -439,10 +441,11 @@ function renderZoneSummary(){const c=bigCount();const box=$('zsum');box.innerHTM
 /* ═══ 表單 ═══ */
 let clockTimer=null;
 function initForm(){
-  const c=bigCount(),sel=$('zoneSel'),prev=sel.value;
-  sel.innerHTML='<option value="">— 請選責任區 —</option>';
-  BIG_ORDER.forEach(b=>{const o=document.createElement('option');o.value=b;o.textContent=`${BIG_LABEL[b]}（${c[b]||0} 台）— ${BIG_DESC[b]}`;sel.appendChild(o);});
-  if(prev&&BIG_ORDER.includes(prev))sel.value=prev;
+  const sel=$('zoneSel'),prev=sel.value,counts={};
+  WO.forEach(x=>{if(x.zc)counts[x.zc]=(counts[x.zc]||0)+1;});
+  sel.innerHTML='<option value="">— 請選責任分區 —</option>';
+  ZONE_ORDER.forEach(zone=>{const o=document.createElement('option');o.value=zone;o.textContent=`${zoneLabel(zone)}（${counts[zone]||0} 台）`;sel.appendChild(o);});
+  if(prev&&ZONE_ORDER.includes(prev))sel.value=prev;
   buildStList(sel.value);
   sel.onchange=()=>buildStList(sel.value);
   $('budgetSel').onchange=async()=>{APP.budget=+$('budgetSel').value||BUDGET_DEF;if(APP.sol&&!$('scrTask').classList.contains('hide'))await reSolve();};
@@ -451,13 +454,13 @@ function initForm(){
 }
 function clockTxt(){const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
 function buildStList(zone){const dl=$('stList');dl.innerHTML='';const seen=new Set();
-  WO.forEach(x=>{if(zone&&x.big!==zone)return;if(x.st&&!seen.has(x.st)){seen.add(x.st);const o=document.createElement('option');o.value=x.st;o.textContent=x.area||'';dl.appendChild(o);}});}
+  WO.forEach(x=>{if(zone&&x.zc!==zone)return;if(x.st&&!seen.has(x.st)){seen.add(x.st);const o=document.createElement('option');o.value=x.st;o.textContent=x.area||'';dl.appendChild(o);}});}
 function nearestStation(la,lo){let best=null,bd=1e9;WO.forEach(x=>{if(x.la!=null){const d=hav({la,lo},{la:x.la,lo:x.lo});if(d<bd){bd=d;best=x;}}});return{st:best,km:bd};}
 $('gpsBtn').onclick=()=>{const h=$('locHint');if(!navigator.geolocation){h.textContent='此裝置不支援定位';return;}h.textContent='定位中…';
   navigator.geolocation.getCurrentPosition(p=>{const la=+p.coords.latitude.toFixed(5),lo=+p.coords.longitude.toFixed(5);
     APP.pos={st:'目前位置(GPS)',la,lo};APP.posLabel='目前位置';$('locInput').value=la+','+lo;
     const nr=nearestStation(la,lo);
-    h.innerHTML=nr.st?`✅ 已定位。最近站:<b>${nr.st.st}</b>(${nr.st.big?BIG_LABEL[nr.st.big]:''},約${(nr.km*1000|0)}m)<span class="apply" data-z="${nr.st.big}">套用此責任區</span>`:'✅ 已定位';
+    h.innerHTML=nr.st?`✅ 已定位。最近站:<b>${nr.st.st}</b>(${zoneLabel(nr.st.zc)},約${(nr.km*1000|0)}m)<span class="apply" data-z="${nr.st.zc}">套用此責任分區</span>`:'✅ 已定位';
     const ap=h.querySelector('.apply');if(ap)ap.onclick=e=>{$('zoneSel').value=e.target.dataset.z;buildStList(e.target.dataset.z);};
   },e=>{h.textContent='⚠️ 定位失敗,請手動輸入站名或座標';},{enableHighAccuracy:true,timeout:10000});};
 $('locInput').addEventListener('input',()=>{APP.pos=null;$('locHint').textContent='';});
@@ -471,7 +474,7 @@ $('goBtn').onclick=async()=>{
   const err=$('formErr');err.textContent='';
   const emp=$('empId').value.trim(),zone=$('zoneSel').value,truck=$('truckId').value.trim();
   if(!emp){err.textContent='請輸入員工編號';return;}
-  if(!zone){err.textContent='請選責任區';return;}
+  if(!zone){err.textContent='請選責任分區';return;}
   if(!truck){err.textContent='請輸入車號';return;}
   const pos=resolveLoc();if(!pos){err.textContent='目前地點無法辨識,請輸入站名/座標或按定位';return;}
   let t=new Date().getHours();if(t<6)t=6;if(t>23)t=23;
@@ -503,14 +506,14 @@ async function releaseMine(){for(const rec of APP.myActs){if(rec&&rec.status!=='
 
 function renderChips(){const s=APP.sol;const per=spdAt(APP.t)<=10?'尖峰':spdAt(APP.t)<=15?'平峰':'夜間';
   $('chips').innerHTML=`<div class="chip"><span>員</span>${APP.emp}</div><div class="chip"><span>車</span>${APP.truck}</div>`+
-    `<div class="chip"><span>區</span>${BIG_LABEL[APP.zone]}</div><div class="chip"><span>工量</span>${s.totalQ}台</div>`+
+    `<div class="chip"><span>區</span>${zoneLabel(APP.zone)}</div><div class="chip"><span>工量</span>${s.totalQ}台</div>`+
     `<div class="chip"><span>路況</span>${per}</div>`;}
 
 /* ═══ 任務渲染(單站) ═══ */
 function renderTask(){
   const sol=APP.sol,i=APP.idx,box=$('taskBox');
   $('stepline').innerHTML=sol.stops.length?`維修站 <b>${Math.min(i+1,sol.stops.length)}</b> / ${sol.stops.length} ・ ${APP.budget} 分鐘時段規劃 ・ ${ROUTE.source}`:'';
-  if(!sol.stops.length){box.innerHTML=`<div class="empty">🎉 ${BIG_LABEL[APP.zone]} 此時段內無可安排工量</div>`;$('doneBtn').classList.add('hide');$('miniInfo').innerHTML='';return;}
+  if(!sol.stops.length){box.innerHTML=`<div class="empty">🎉 ${zoneLabel(APP.zone)} 此時段內無可安排工量</div>`;$('doneBtn').classList.add('hide');$('miniInfo').innerHTML='';return;}
   if(i>=sol.stops.length){renderFinish();return;}
   $('doneBtn').classList.remove('hide');
   const n=sol.stops[i],leg=sol.legs[i];
