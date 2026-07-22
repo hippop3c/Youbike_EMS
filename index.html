@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<!-- GitHub Pages build · 2026-07-22 -->
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="description" content="智慧維護調度：依責任區、目前位置與行車時間預算規劃維修派工路徑。">
+<meta name="theme-color" content="#f4ca00">
+<meta name="color-scheme" content="light">
+<meta name="format-detection" content="telephone=no">
+<title>智慧維護調度 — 派工規劃</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --yb:#f4ca00; --ink:#1c1a12; --paper:#fbf8ef; --card:#ffffff;
+  --line:#d9d2b8; --muted:#7a745e;
+  --fix:#0b62c4; --fix-bg:#eaf2fc; --ok:#1d9a6c; --warn:#e88600; --over:#e03a2c;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{font-size:16px}
+body{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  background:var(--paper);color:var(--ink);min-height:100vh;
+  background-image:repeating-linear-gradient(0deg,transparent,transparent 34px,rgba(28,26,18,.035) 34px,rgba(28,26,18,.035) 35px)}
+.wrap{max-width:540px;margin:0 auto;padding:0 14px 90px}
+header{background:var(--yb);margin:0 -14px 14px;padding:14px 18px 12px;border-bottom:3px solid var(--ink);
+  display:flex;align-items:baseline;justify-content:space-between}
+header h1{font-size:1.06rem;font-weight:900;letter-spacing:.1em}
+header .clock{font-variant-numeric:tabular-nums;font-weight:700;font-size:.9rem}
+.card{background:var(--card);border:1.5px solid var(--ink);border-radius:10px;box-shadow:4px 4px 0 rgba(28,26,18,.15);padding:16px;margin-bottom:16px}
+.fld{margin-bottom:14px}
+.fld label{display:block;font-size:.78rem;font-weight:800;letter-spacing:.1em;margin-bottom:6px}
+.fld label .req{color:var(--over);margin-left:2px}
+.fld input,.fld select{width:100%;font-size:1.05rem;padding:11px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-family:inherit}
+.fld input:focus,.fld select:focus{outline:2px solid var(--yb);border-color:var(--ink)}
+.loc-row{display:flex;gap:8px}.loc-row input{flex:1}
+.gps-btn{flex:none;padding:0 14px;border:1.5px solid var(--ink);border-radius:8px;background:var(--yb);font-weight:800;font-size:.92rem;cursor:pointer;font-family:inherit}
+.gps-btn:active{transform:translate(1px,1px)}
+.hint{font-size:.76rem;color:var(--muted);margin-top:6px;min-height:1em}.hint b{color:var(--ink)}.hint .apply{color:var(--fix);text-decoration:underline;cursor:pointer;margin-left:6px}
+.go-btn{width:100%;margin-top:4px;padding:15px;font-size:1.12rem;font-weight:900;letter-spacing:.2em;background:var(--ink);color:var(--yb);border:none;border-radius:10px;cursor:pointer;font-family:inherit;box-shadow:4px 4px 0 rgba(28,26,18,.25)}
+.go-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(28,26,18,.25)}
+.err{color:var(--over);font-size:.85rem;margin-top:10px;font-weight:700;min-height:1em}
+/* 監控 */
+.mon{border-style:dashed;background:#faf6e8}
+.mon-h{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;font-weight:900;letter-spacing:.05em}
+.mon-h .tag{font-size:.66rem;background:var(--ink);color:var(--yb);border-radius:5px;padding:2px 7px}
+.mon-h .arw{margin-left:auto;transition:transform .2s}.mon.open .mon-h .arw{transform:rotate(90deg)}
+.mon-body{display:none;margin-top:12px}.mon.open .mon-body{display:block}
+.up-drop{border:1.5px dashed var(--ink);border-radius:8px;padding:16px;text-align:center;background:#fff;cursor:pointer}
+.up-drop:active{background:#fdf7e2}.up-drop .big{font-size:.98rem;font-weight:800}.up-drop .sub{font-size:.74rem;color:var(--muted);margin-top:4px}
+.up-status{font-size:.78rem;font-weight:700;margin-top:10px;min-height:1em}.up-status.ok{color:var(--ok)}.up-status.err{color:var(--over)}
+.zsum{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px}
+.zbox{border:1.2px solid var(--ink);border-radius:8px;padding:8px 4px;text-align:center;background:#fff}
+.zbox .zn{font-size:.72rem;font-weight:900}.zbox .zc{font-size:1.35rem;font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums}.zbox .zl{font-size:.6rem;color:var(--muted);font-weight:700}
+.zbox.北{border-top:4px solid #5b6cb5}.zbox.東{border-top:4px solid #c85a2b}.zbox.南{border-top:4px solid #1d9a6c}.zbox.西{border-top:4px solid #8a4fbf}
+.src-note{font-size:.72rem;color:var(--muted);font-weight:700;margin-top:8px}
+/* feed */
+.feed{background:var(--card);border:1.5px solid var(--ink);border-radius:12px;box-shadow:4px 4px 0 rgba(28,26,18,.12);margin-bottom:14px;overflow:hidden}
+.feed-h{display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--yb);padding:7px 12px;font-size:.8rem;font-weight:800}
+.feed-h .note{color:#ffd;font-weight:700;font-size:.7rem}.feed-h a{margin-left:auto;color:var(--yb);text-decoration:underline;cursor:pointer;font-size:.74rem}
+.feed ul{list-style:none;max-height:190px;overflow-y:auto}
+.feed li{padding:8px 12px;border-bottom:1px dashed var(--line);font-size:.8rem}.feed li:last-child{border-bottom:none}
+.feed .frow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.feed .froute{color:var(--muted);font-size:.72rem;margin-top:2px}
+.feed .ftime{margin-left:auto;color:var(--muted);font-size:.7rem;font-variant-numeric:tabular-nums}
+.fst{flex:none;font-size:.66rem;font-weight:900;border-radius:5px;padding:1px 6px;color:#fff}.fst.run{background:var(--fix)}.fst.done{background:var(--ok)}.fst.todo{background:#6c7a8e}
+.fme{background:var(--yb);border:1px solid var(--ink);border-radius:4px;font-size:.6rem;font-weight:900;padding:0 4px;margin-left:4px}
+.fkind{font-weight:900;color:var(--fix)}
+.feed .fempty{padding:12px;text-align:center;color:var(--muted);font-size:.78rem;font-weight:700}
+.rpt{padding:10px 12px;border-bottom:1.5px dashed var(--line);background:#faf6e8}
+.rpt .row{display:flex;gap:6px;margin-bottom:8px}
+.rpt input,.rpt select{padding:9px;border:1.2px solid var(--line);border-radius:8px;font-size:.9rem;font-family:inherit;background:#fff}
+.rpt .r-st{flex:1;min-width:0}.rpt .r-q{width:64px}
+.rpt .r-send{width:100%;padding:10px;border:1.5px solid var(--ink);border-radius:8px;background:var(--yb);font-weight:900;cursor:pointer;font-family:inherit}
+/* chips */
+.chiprow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin:10px 0}
+.chip{background:var(--card);border:1.2px solid var(--ink);border-radius:999px;font-size:.68rem;padding:4px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.chip span{color:var(--muted);margin-right:2px}
+@media(max-width:420px){.chip{font-size:.62rem}}
+.stepline{font-size:.78rem;color:var(--muted);font-weight:700;margin:4px 2px 10px}.stepline b{color:var(--ink)}
+#map{height:200px;border:1.5px solid var(--ink);border-radius:10px;margin-bottom:14px}
+.map-fallback{height:100%;display:grid;place-items:center;text-align:center;padding:18px;color:var(--muted);font-size:.82rem;font-weight:700;background:#faf6e8;border-radius:8px}
+.noscript{color:var(--over);font-size:.86rem;font-weight:800}
+/* task card */
+.task-card{background:var(--card);border:1.5px solid var(--ink);border-radius:12px;box-shadow:5px 5px 0 rgba(28,26,18,.15);overflow:hidden;margin-bottom:14px}
+.task-head{padding:12px 14px;display:flex;align-items:center;gap:10px;border-bottom:1.5px dashed var(--line);background:var(--fix-bg)}
+.badge{flex:none;font-size:1rem;font-weight:900;color:#fff;background:var(--fix);border-radius:8px;padding:6px 12px;letter-spacing:.15em}
+.task-title{flex:1}.task-title .tgt{font-size:1.18rem;font-weight:900;line-height:1.25}.task-title .sub{font-size:.76rem;color:var(--muted);font-weight:700;margin-top:2px}
+.task-load{flex:none;text-align:center}.task-load .n{font-size:1.7rem;font-weight:900;line-height:1}.task-load .u{font-size:.7rem;color:var(--muted);font-weight:700}
+.link-bar{display:flex;align-items:center;gap:8px;background:#f1ecdc;padding:8px 14px;font-size:.8rem;font-weight:700;border-bottom:1.5px dashed var(--line)}
+.link-bar .lk-time{margin-left:auto;font-variant-numeric:tabular-nums}
+.bikes{padding:8px 14px}
+.bike{display:flex;gap:8px;font-size:.82rem;padding:6px 0;border-bottom:1px dashed var(--line);align-items:center}.bike:last-child{border-bottom:none}
+.bike .bn{font-weight:900;font-variant-numeric:tabular-nums;flex:none;background:#eef;border:1px solid var(--line);border-radius:4px;padding:0 6px}
+.bike .bw{color:var(--muted);flex:1}.bike .bd{flex:none;color:var(--muted);font-size:.72rem}
+.bike .bs{flex:none;font-size:.62rem;font-weight:900;border-radius:4px;padding:1px 5px;color:#fff;background:#6c7a8e}
+.bike .bs.撿尾,.bike .bs.客專撿尾{background:var(--over)}.bike .bs.維修通報{background:var(--fix)}.bike .bs.客服{background:var(--warn)}
+.nav-bar{padding:0 14px 12px}.nav-btn{display:inline-block;font-size:.82rem;font-weight:800;color:var(--fix);text-decoration:underline;cursor:pointer}
+.est-line{padding:0 14px 10px;font-size:1rem;font-weight:800}.est-line b{font-size:1.3rem}
+.pg-wrap{padding:0 14px 14px}.pg-track{height:10px;border:1.2px solid var(--ink);border-radius:99px;overflow:hidden;background:#fff}
+.pg-fill{height:100%;background:var(--yb);transition:width .4s}.pg-fill.warn{background:var(--warn)}.pg-fill.over{background:var(--over)}
+.pg-txt{font-size:.72rem;color:var(--muted);font-weight:700;margin-top:4px;text-align:right}
+.act-row{display:flex;gap:10px;margin-top:4px}
+.btn{flex:1;padding:14px;font-size:1.02rem;font-weight:900;border-radius:10px;cursor:pointer;font-family:inherit;border:1.5px solid var(--ink);letter-spacing:.08em}
+.btn.done{background:var(--ok);color:#fff;border-color:var(--ok)}.btn.ghost{background:#fff}.btn:active{transform:translate(1px,1px)}
+.mini{font-size:.78rem;color:var(--muted);text-align:center;margin-top:12px;font-weight:700}.mini a{color:var(--fix);cursor:pointer;text-decoration:underline}
+.fin{background:var(--card);border:1.5px solid var(--ink);border-radius:12px;text-align:center;padding:28px 16px;box-shadow:5px 5px 0 rgba(28,26,18,.15)}
+.fin .big{font-size:2.2rem;font-weight:900}.fin .lbl{font-size:.85rem;color:var(--muted);font-weight:700;margin-bottom:14px}
+.fin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0 20px}
+.cg{border:1.2px solid var(--line);border-radius:8px;padding:8px 4px;text-align:center;background:#fff}.cg .v{font-size:1.3rem;font-weight:900}.cg .l{font-size:.62rem;color:var(--muted);font-weight:700}
+.empty{background:var(--card);border:1.5px dashed var(--ink);border-radius:12px;text-align:center;padding:34px 16px;font-weight:700;color:var(--muted)}
+.leftover{background:#faf6e8;border:1.2px dashed var(--ink);border-radius:8px;padding:10px 12px;font-size:.78rem;color:var(--muted);font-weight:700;margin-bottom:14px}
+.hide{display:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>智慧維護調度</h1><div class="clock" id="clock" aria-label="目前時間"></div></header>
+  <noscript><div class="card noscript">此系統需要啟用 JavaScript 才能進行派工規劃。</div></noscript>
+
+  <!-- 監控上傳 -->
+  <section class="card mon" id="monCard">
+    <div class="mon-h" id="monToggle" role="button" tabindex="0" aria-expanded="false" aria-controls="monBody"><span class="tag">監控</span><span>上傳派工總表 · 自動分區 · 上線</span><span class="arw">▸</span></div>
+    <div class="mon-body" id="monBody">
+      <div class="up-drop" id="upDrop">
+        <div class="big">點此上傳 派工總表.xlsx</div>
+        <div class="sub">讀「2.0派工總表」→ 依區域代號歸四大責任區 → 推送給全區同仁</div>
+        <input type="file" id="fileIn" accept=".xlsx,.xls" style="display:none">
+      </div>
+      <div class="up-status" id="upStatus" aria-live="polite"></div>
+      <div class="zsum" id="zsum"></div>
+      <div class="src-note" id="srcNote"></div>
+    </div>
+  </section>
+
+  <!-- 表單 -->
+  <section id="scrForm">
+    <div class="card">
+      <div class="fld"><label for="empId">員工編號<span class="req">＊</span></label><input id="empId" autocomplete="off" placeholder="例:A12345" aria-required="true"></div>
+      <div class="fld"><label for="zoneSel">責任區<span class="req">＊</span></label><select id="zoneSel" aria-required="true"></select></div>
+      <div class="fld"><label for="truckId">車號 / 車牌<span class="req">＊</span></label><input id="truckId" autocomplete="off" placeholder="例:KEA-1234" aria-required="true"></div>
+      <div class="fld"><label for="locInput">目前地點<span class="req">＊</span></label>
+        <div class="loc-row"><input id="locInput" list="stList" autocomplete="off" placeholder="輸入場站名稱 或 緯度,經度" aria-required="true"><button class="gps-btn" id="gpsBtn" type="button" aria-label="使用目前位置定位">📍 定位</button></div>
+        <datalist id="stList"></datalist><div class="hint" id="locHint" aria-live="polite"></div>
+      </div>
+      <div class="fld"><label for="budgetSel">未來可派時段(行車時間預算)</label>
+        <select id="budgetSel">
+          <option value="30">30 分鐘</option><option value="60" selected>60 分鐘</option>
+          <option value="90">90 分鐘</option><option value="120">120 分鐘</option>
+          <option value="180">180 分鐘(半天)</option><option value="240">240 分鐘(整班)</option>
+        </select>
+        <div class="hint">目標:此時段內以最短行車串出<b>最多可維修工量</b>。僅計行車、不含作業時間。</div>
+      </div>
+      <button class="go-btn" id="goBtn" type="button" aria-describedby="formErr">規 劃 派 工 路 徑</button>
+      <div class="err" id="formErr" role="alert" aria-live="assertive"></div>
+    </div>
+  </section>
+
+  <!-- 任務 -->
+  <section id="scrTask" class="hide">
+    <div id="feedBox"></div>
+    <div class="chiprow" id="chips"></div>
+    <div class="stepline" id="stepline"></div>
+    <div id="map" aria-label="派工路線地圖"></div>
+    <div id="taskBox"></div>
+    <div id="leftBox"></div>
+    <div class="act-row" id="actRow">
+      <button class="btn ghost" id="backBtn" type="button">↩ 返回</button>
+      <button class="btn done" id="doneBtn" type="button">✔ 完成本站維修</button>
+    </div>
+    <div class="mini" id="miniInfo"></div>
+  </section>
+</div>
+
+<script>
+/* ═══ 區域對照(可調) ═══ */
+const ZONE_INFO={G1:['中和區','和平'],G2:['永和區','和平'],K1:['板橋區','和平'],K2:['土城區','和平'],
+B0:['台大校內外','新店'],B1:['大安區','新店'],B2:['文山區','新店'],J:['新店坪林石碇深坑烏來','新店'],
+C1:['大同區','蘆洲'],D1:['萬華區','蘆洲'],D2:['中正區','蘆洲'],H:['蘆洲五股','蘆洲'],H1:['三重區','蘆洲'],H2:['林口八里','蘆洲'],
+E1:['士林區','洲美'],E2:['北投區','洲美'],L:['淡水石門三芝','洲美'],
+A2:['南港區','汐止'],F:['金山萬里汐止','汐止'],N:['瑞芳平溪雙溪貢寮','汐止'],
+C2:['中山區','瑞光'],A3:['內湖區','瑞光'],A1:['信義區','瑞光'],C3:['松山區','瑞光'],
+I:['新莊區','新莊'],M:['樹林三峽鶯歌','新莊']};
+const DEPOT_BIG={洲美:'北',汐止:'北',瑞光:'東',蘆洲:'西',新莊:'西',新店:'南',和平:'南'};
+const BIG_ORDER=['北','東','南','西'];
+const BIG_LABEL={北:'北區',東:'東區',南:'南區',西:'西區'};
+const BIG_DESC={北:'士林 北投 淡水 南港 汐止 瑞芳',東:'中山 松山 內湖 信義',南:'台大 大安 文山 新店 中永和 板橋 土城',西:'三重 蘆洲 大同 萬華 中正 林口 新莊 樹三鶯'};
+
+/* ═══ 內建預設工單(監控可上傳覆蓋) ═══ */
+const DEFAULT_WO=[];
+
+/* ★★ 跨裝置串接設定 ★★
+   照 DISPATCH 模式:部署附的 Code.gs → 貼「網頁應用程式網址」(結尾 /exec)到下面。
+   留空 = 單機模式(內建工單 + 同機分頁互通),仍可完整測試。 */
+const SYNC_URL='';
+
+const $=id=>document.getElementById(id);
+const LS_WO='maint_wo_v1';
+
+/* ═══ geo / 速度 ═══ */
+function hav(a,b){if(!a||!b||a.la==null||b.la==null)return 0;const R=6371,r=Math.PI/180,
+  dL=(b.la-a.la)*r,dN=(b.lo-a.lo)*r,x=Math.sin(dL/2)**2+Math.cos(a.la*r)*Math.cos(b.la*r)*Math.sin(dN/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
+function spdAt(h){if((h>=7&&h<=9)||(h>=17&&h<=19))return 10;if(h>=20)return 20;return 15;}
+function osrmFactor(s){return s<=10?2.0:(s<=15?1.2:1.0);}
+const TOR=1.3,DRIVE_BUF=1,BUDGET_DEF=60;
+
+/* ═══ OSRM 路徑矩陣(照 DISPATCH) ═══ */
+const ROUTE_BASE='https://router.project-osrm.org';
+const ROUTE_TTL=6*3600*1000,ROUTE_MAX=80;
+let ROUTE={sig:'',map:{},fetchedAt:0,source:'距離估算'};
+function locKey(p){return p&&p.la!=null?(Number(p.lo).toFixed(5)+','+Number(p.la).toFixed(5)):'';}
+function pairKey(a,b){return locKey(a)+'=>'+locKey(b);}
+function routeMetric(a,b){if(!a||!b)return null;if(locKey(a)===locKey(b))return{km:0,min:0};return ROUTE.map[pairKey(a,b)]||null;}
+function drv(a,b,s){const m=routeMetric(a,b);if(m)return m.min<=0.05?0:m.min*osrmFactor(s);
+  const km=hav(a,b);if(km<=0.001)return 0;return km*TOR/s*60+DRIVE_BUF;}
+async function loadRouteMatrix(startRec,nodes){
+  let pts=[startRec,...nodes].filter(p=>p&&p.la!=null);
+  const seen=new Set();pts=pts.filter(p=>{const k=locKey(p);if(!k||seen.has(k))return false;seen.add(k);return true;});
+  if(pts.length>ROUTE_MAX){const ref=startRec||pts[0];pts=pts.sort((a,b)=>hav(ref,a)-hav(ref,b)).slice(0,ROUTE_MAX);}
+  const sig=pts.map(locKey).join('|');
+  if(ROUTE.sig===sig&&Date.now()-ROUTE.fetchedAt<ROUTE_TTL)return ROUTE;
+  if(pts.length<2){ROUTE={sig,map:{},fetchedAt:Date.now(),source:'距離估算'};return ROUTE;}
+  try{
+    const coords=pts.map(p=>Number(p.lo).toFixed(6)+','+Number(p.la).toFixed(6)).join(';');
+    const r=await fetch(ROUTE_BASE+'/table/v1/driving/'+coords+'?annotations=duration,distance');
+    const js=await r.json();if(js.code!=='Ok'||!Array.isArray(js.durations))throw 0;
+    const map={};for(let i=0;i<pts.length;i++)for(let j=0;j<pts.length;j++){if(i===j)continue;
+      const d=js.durations[i]&&js.durations[i][j],km=js.distances&&js.distances[i]&&js.distances[i][j];
+      if(d==null||km==null)continue;map[pairKey(pts[i],pts[j])]={km:Math.max(0,km/1000),min:Math.max(0,d/60)};}
+    ROUTE={sig,map,fetchedAt:Date.now(),source:'OSRM道路時間'};
+  }catch(e){ROUTE={sig,map:ROUTE.map||{},fetchedAt:Date.now(),source:'距離估算'};}
+  return ROUTE;
+}
+
+/* ═══ 工單資料層(GAS ?wo / 內建 / localStorage) ═══ */
+let WO=[];
+function classify(zc){const zi=ZONE_INFO[zc];if(!zi)return{area:'未分類',depot:'其他',big:'其他'};return{area:zi[0],depot:zi[1],big:DEPOT_BIG[zi[1]]||'其他'};}
+async function loadWorkorders(){
+  if(SYNC_URL){try{const r=await fetch(SYNC_URL+'?wo=1&t='+Date.now());const a=await r.json();
+    if(Array.isArray(a)&&a.length){WO=a;return 'gas';}}catch(e){}}
+  try{const s=localStorage.getItem(LS_WO);if(s){WO=JSON.parse(s);return 'local';}}catch(e){}
+  WO=DEFAULT_WO;return 'default';
+}
+async function pushWorkorders(items){
+  if(SYNC_URL){try{await fetch(SYNC_URL,{method:'POST',body:JSON.stringify({op:'setWO',items})});}catch(e){}}
+  try{localStorage.setItem(LS_WO,JSON.stringify(items));}catch(e){}
+  WO=items;
+}
+
+/* ═══ 同區動態層(GAS Store,照 DISPATCH) ═══ */
+const MEM={};let BC=null;try{BC=new BroadcastChannel('yb-maint')}catch(e){}
+const Store={
+  mode:SYNC_URL?'gas':'local',
+  async load(zone){
+    if(this.mode==='gas'){try{const r=await fetch(SYNC_URL+'?zone='+encodeURIComponent(zone)+'&t='+Date.now());const a=await r.json();return Array.isArray(a)?a:[];}catch(e){return APP.acts||[];}}
+    const key='mact:'+zone;try{const v=localStorage.getItem(key);return v?JSON.parse(v):(MEM[key]||[]);}catch(e){return MEM[key]||[];}
+  },
+  async upsert(zone,rec){
+    if(this.mode==='gas'){try{await fetch(SYNC_URL,{method:'POST',body:JSON.stringify({op:'upsert',zone,rec})});}catch(e){}return this.load(zone);}
+    let a=await this.load(zone);const i=a.findIndex(x=>x.id===rec.id);if(i>=0)a[i]=rec;else a.push(rec);return this._save(zone,a);
+  },
+  async remove(zone,id){
+    if(this.mode==='gas'){try{await fetch(SYNC_URL,{method:'POST',body:JSON.stringify({op:'remove',zone,id})});}catch(e){}return this.load(zone);}
+    let a=await this.load(zone);a=a.filter(x=>x.id!==id);return this._save(zone,a);
+  },
+  async _save(zone,a){const key='mact:'+zone;const cut=Date.now()-12*3600*1000;a=a.filter(x=>(x.doneTs||x.ts)>=cut).slice(-200);
+    try{localStorage.setItem(key,JSON.stringify(a));if(BC)BC.postMessage(zone);}catch(e){MEM[key]=a;}return a;}
+};
+async function upsertAct(rec){APP.acts=await Store.upsert(APP.zone,rec);}
+async function removeAct(id){APP.acts=await Store.remove(APP.zone,id);}
+
+/* ═══ 排除別人已認領/完成的車(避免撞單) ═══ */
+function claimedBikes(acts){const s=new Set();for(const a of acts||[]){(a.bikes||[]).forEach(b=>s.add(b));}return s;}
+const claimSig=acts=>[...claimedBikes((acts||[]).filter(a=>a.emp!==APP.emp))].sort().join(',');
+
+/* ═══ APP 狀態 ═══ */
+const APP={pos:null,posLabel:'',emp:'',truck:'',zone:'',t:0,sol:null,idx:0,cum:0,budget:BUDGET_DEF,acts:[],myActs:[],claimSig:'',rtSig:''};
+
+/* ═══ 站點聚合 + 採集式路徑(orienteering) ═══ */
+function clusterStations(zone,claimed){
+  const m=new Map();
+  WO.forEach(x=>{if(x.big!==zone||x.la==null)return;if(claimed&&claimed.has(x.bike))return;
+    const k=x.code||x.st;if(!m.has(k))m.set(k,{code:x.code,st:x.st,la:x.la,lo:x.lo,items:[]});m.get(k).items.push(x);});
+  return [...m.values()].map(n=>{n.q=n.items.length;
+    n.prio=n.items.reduce((s,it)=>s+(/優先|60天以上|維修通報|客服/.test((it.why||'')+(it.src||''))?1:0),0);return n;});
+}
+function planRoute(start,nodes,budget,spd){
+  const D=(a,b)=>drv(a,b,spd);
+  let beam=[{seq:[],last:start,used:0,q:0,prio:0,vis:new Set()}];
+  const W=12,C=16;let improved=true,guard=0;
+  while(improved&&guard++<80){improved=false;const next=[];
+    beam.forEach(s=>{const cand=[];
+      nodes.forEach((n,i)=>{if(s.vis.has(i))return;const t=D(s.last,n);if(s.used+t>budget)return;cand.push({i,n,t,ratio:(n.q+n.prio*0.3)/(t+1)});});
+      cand.sort((a,b)=>b.ratio-a.ratio);
+      cand.slice(0,C).forEach(c=>{const v=new Set(s.vis);v.add(c.i);
+        next.push({seq:s.seq.concat(c.i),last:c.n,used:s.used+c.t,q:s.q+c.n.q,prio:s.prio+c.n.prio,vis:v});improved=true;});
+      next.push(s);});
+    const sig=s=>[...s.vis].sort((a,b)=>a-b).join(',');const best=new Map();
+    next.forEach(s=>{const k=sig(s);const o=best.get(k);if(!o||s.q>o.q||(s.q===o.q&&s.used<o.used))best.set(k,s);});
+    beam=[...best.values()].sort((a,b)=>b.q-a.q||b.prio-a.prio||a.used-b.used).slice(0,W);}
+  const win=beam.sort((a,b)=>b.q-a.q||b.prio-a.prio||a.used-b.used)[0];
+  // 組 schedule + legs
+  let prev=start,legs=[],acc=0;const stops=win.seq.map(i=>nodes[i]);
+  stops.forEach(n=>{const mn=D(prev,n),km=(routeMetric(prev,n)||{km:hav(prev,n)*TOR}).km;acc+=mn;legs.push({min:mn,km,acc,from:prev.st||prev.name||'目前位置'});prev=n;});
+  return {stops,legs,totalQ:win.q,totalMin:acc,totalStops:stops.length};
+}
+
+/* ═══ 動態記錄 ═══ */
+function newTaskAct(node){return{id:APP.emp+'-'+Date.now()+'-'+Math.floor(Math.random()*1e4),
+  emp:APP.emp,truck:APP.truck,zone:APP.zone,kind:'task',st:node.st,code:node.code,q:node.q,
+  bikes:node.items.map(it=>it.bike),reasons:node.items.map(it=>({b:it.bike,w:it.why,d:it.dock,s:it.src})),
+  status:'進行中',ts:Date.now(),doneTs:null};}
+
+/* ═══ 同區動態面板 ═══ */
+function tHM(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+function renderFeed(){
+  const box=$('feedBox');if(!APP.zone){box.innerHTML='';return;}
+  const ORD={'進行中':0,'未執行':1,'已完成':2};
+  const list=(APP.acts||[]).slice().sort((a,b)=>(ORD[a.status]??9)-(ORD[b.status]??9)||(b.doneTs||b.ts)-(a.doneTs||a.ts)).slice(0,12);
+  const items=list.map(a=>{const sc=a.status==='進行中'?'run':a.status==='已完成'?'done':'todo';
+    const me=a.emp===APP.emp?'<span class="fme">我</span>':'';
+    const route=`<div class="froute">${a.st} · ${a.q} 台</div>`;
+    return`<li><div class="frow"><span class="fst ${sc}">${a.status}</span><span class="fkind">維修</span>`+
+      `<span>${a.emp}${a.truck?'/'+a.truck:''}${me}</span><span class="ftime">${tHM(a.doneTs||a.ts)}</span></div>${route}</li>`;}).join('');
+  const stale=APP.sol&&claimSig(APP.acts)!==APP.claimSig;
+  const note=stale?'⚠️ 有新動態,建議重算':'';
+  box.innerHTML=`<div class="feed"><div class="feed-h"><span>同區動態 ${BIG_LABEL[APP.zone]||APP.zone}</span>`+
+    `<span class="note">${note}</span><a id="rptBtn">＋回報單台完成</a></div>`+
+    `<div class="rpt hide" id="rptForm"><div class="row">`+
+    `<input class="r-st" id="rptBike" placeholder="車號" autocomplete="off"><input class="r-st" id="rptStn" list="stList" placeholder="場站" autocomplete="off"></div>`+
+    `<button class="r-send" id="rptSend" type="button">回報此車已完成維修</button></div>`+
+    (items?`<ul>${items}</ul>`:'<div class="fempty">目前無維修動態</div>')+`</div>`;
+  $('rptBtn').onclick=()=>$('rptForm').classList.toggle('hide');
+  $('rptSend').onclick=async()=>{const bike=$('rptBike').value.trim(),st=$('rptStn').value.trim();if(!bike)return;
+    await upsertAct({id:APP.emp+'-r'+Date.now(),emp:APP.emp,truck:APP.truck,zone:APP.zone,kind:'task',st:st||'單台回報',code:'',q:1,bikes:[bike],reasons:[{b:bike}],status:'已完成',ts:Date.now(),doneTs:Date.now()});
+    renderFeed();};
+}
+
+/* ═══ 四大區統計 ═══ */
+function bigCount(){const c={北:0,東:0,南:0,西:0,其他:0};WO.forEach(x=>{c[x.big]=(c[x.big]||0)+1;});return c;}
+function renderZoneSummary(){const c=bigCount();const box=$('zsum');box.innerHTML='';
+  BIG_ORDER.forEach(b=>{const d=document.createElement('div');d.className='zbox '+b;
+    d.innerHTML=`<div class="zn">${BIG_LABEL[b]}</div><div class="zc">${c[b]||0}</div><div class="zl">台</div>`;box.appendChild(d);});}
+
+/* ═══ 表單 ═══ */
+let clockTimer=null;
+function initForm(){
+  const c=bigCount(),sel=$('zoneSel'),prev=sel.value;
+  sel.innerHTML='<option value="">— 請選責任區 —</option>';
+  BIG_ORDER.forEach(b=>{const o=document.createElement('option');o.value=b;o.textContent=`${BIG_LABEL[b]}（${c[b]||0} 台）— ${BIG_DESC[b]}`;sel.appendChild(o);});
+  if(prev&&BIG_ORDER.includes(prev))sel.value=prev;
+  buildStList(sel.value);
+  sel.onchange=()=>buildStList(sel.value);
+  $('budgetSel').onchange=async()=>{APP.budget=+$('budgetSel').value||BUDGET_DEF;if(APP.sol&&!$('scrTask').classList.contains('hide'))await reSolve();};
+  $('clock').textContent=clockTxt();
+  if(!clockTimer)clockTimer=setInterval(()=>$('clock').textContent=clockTxt(),1000);
+}
+function clockTxt(){const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+function buildStList(zone){const dl=$('stList');dl.innerHTML='';const seen=new Set();
+  WO.forEach(x=>{if(zone&&x.big!==zone)return;if(x.st&&!seen.has(x.st)){seen.add(x.st);const o=document.createElement('option');o.value=x.st;o.textContent=x.area||'';dl.appendChild(o);}});}
+function nearestStation(la,lo){let best=null,bd=1e9;WO.forEach(x=>{if(x.la!=null){const d=hav({la,lo},{la:x.la,lo:x.lo});if(d<bd){bd=d;best=x;}}});return{st:best,km:bd};}
+$('gpsBtn').onclick=()=>{const h=$('locHint');if(!navigator.geolocation){h.textContent='此裝置不支援定位';return;}h.textContent='定位中…';
+  navigator.geolocation.getCurrentPosition(p=>{const la=+p.coords.latitude.toFixed(5),lo=+p.coords.longitude.toFixed(5);
+    APP.pos={st:'目前位置(GPS)',la,lo};APP.posLabel='目前位置';$('locInput').value=la+','+lo;
+    const nr=nearestStation(la,lo);
+    h.innerHTML=nr.st?`✅ 已定位。最近站:<b>${nr.st.st}</b>(${nr.st.big?BIG_LABEL[nr.st.big]:''},約${(nr.km*1000|0)}m)<span class="apply" data-z="${nr.st.big}">套用此責任區</span>`:'✅ 已定位';
+    const ap=h.querySelector('.apply');if(ap)ap.onclick=e=>{$('zoneSel').value=e.target.dataset.z;buildStList(e.target.dataset.z);};
+  },e=>{h.textContent='⚠️ 定位失敗,請手動輸入站名或座標';},{enableHighAccuracy:true,timeout:10000});};
+$('locInput').addEventListener('input',()=>{APP.pos=null;$('locHint').textContent='';});
+function resolveLoc(){const v=$('locInput').value.trim();if(APP.pos)return APP.pos;if(!v)return null;
+  if(v.includes(',')){const p=v.split(',');const a=parseFloat(p[0]),b=parseFloat(p[1]);if(!isNaN(a)&&!isNaN(b))return{st:'目前座標',la:a,lo:b};}
+  const z=$('zoneSel').value;let hit=WO.find(x=>x.st===v&&x.la!=null)||WO.find(x=>x.st&&x.st.includes(v)&&x.la!=null);
+  return hit?{st:hit.st,la:hit.la,lo:hit.lo}:null;}
+
+/* ═══ 派發流程(照 DISPATCH) ═══ */
+$('goBtn').onclick=async()=>{
+  const err=$('formErr');err.textContent='';
+  const emp=$('empId').value.trim(),zone=$('zoneSel').value,truck=$('truckId').value.trim();
+  if(!emp){err.textContent='請輸入員工編號';return;}
+  if(!zone){err.textContent='請選責任區';return;}
+  if(!truck){err.textContent='請輸入車號';return;}
+  const pos=resolveLoc();if(!pos){err.textContent='目前地點無法辨識,請輸入站名/座標或按定位';return;}
+  let t=new Date().getHours();if(t<6)t=6;if(t>23)t=23;
+  APP.emp=emp;APP.truck=truck;APP.zone=zone;APP.pos=pos;APP.posLabel=pos.st||'目前位置';APP.t=t;APP.budget=+$('budgetSel').value||BUDGET_DEF;
+  const spd=spdAt(t);
+  $('goBtn').textContent='讀取工單資料…';await loadWorkorders();
+  $('goBtn').disabled=true;
+  APP.acts=await Store.load(zone);
+  for(const a of APP.acts.filter(a=>a.emp===emp&&a.status!=='已完成'))await removeAct(a.id);
+  const claimed=claimedBikes(APP.acts);
+  let nodes=clusterStations(zone,claimed);
+  if(!nodes.length){$('goBtn').textContent='規 劃 派 工 路 徑';$('goBtn').disabled=false;err.textContent=`${BIG_LABEL[zone]}目前無可規劃工單`;return;}
+  $('goBtn').textContent='計算道路行車時間…';await loadRouteMatrix(pos,nodes);
+  APP.sol=planRoute(pos,nodes,APP.budget,spd);
+  APP.claimSig=claimSig(APP.acts);
+  APP.idx=0;APP.cum=0;
+  await claimSchedule();
+  $('goBtn').textContent='規 劃 派 工 路 徑';$('goBtn').disabled=false;
+  $('scrForm').classList.add('hide');$('scrTask').classList.remove('hide');
+  renderChips();renderFeed();renderTask();drawMap();window.scrollTo(0,0);
+};
+
+/* 整條路線登記:當前站=進行中,其餘=未執行 */
+async function claimSchedule(){APP.myActs=[];if(!APP.sol)return;
+  for(let i=0;i<APP.sol.stops.length;i++){const rec=newTaskAct(APP.sol.stops[i]);rec.status=(i===APP.idx)?'進行中':'未執行';APP.myActs[i]=rec;await upsertAct(rec);}}
+async function releaseMine(){for(const rec of APP.myActs){if(rec&&rec.status!=='已完成')await removeAct(rec.id);}APP.myActs=[];}
+
+function renderChips(){const s=APP.sol;const per=spdAt(APP.t)<=10?'尖峰':spdAt(APP.t)<=15?'平峰':'夜間';
+  $('chips').innerHTML=`<div class="chip"><span>員</span>${APP.emp}</div><div class="chip"><span>車</span>${APP.truck}</div>`+
+    `<div class="chip"><span>區</span>${BIG_LABEL[APP.zone]}</div><div class="chip"><span>工量</span>${s.totalQ}台</div>`+
+    `<div class="chip"><span>路況</span>${per}</div>`;}
+
+/* ═══ 任務渲染(單站) ═══ */
+function renderTask(){
+  const sol=APP.sol,i=APP.idx,box=$('taskBox');
+  $('stepline').innerHTML=sol.stops.length?`維修站 <b>${Math.min(i+1,sol.stops.length)}</b> / ${sol.stops.length} ・ ${APP.budget} 分鐘時段規劃 ・ ${ROUTE.source}`:'';
+  if(!sol.stops.length){box.innerHTML=`<div class="empty">🎉 ${BIG_LABEL[APP.zone]} 此時段內無可安排工量</div>`;$('doneBtn').classList.add('hide');$('miniInfo').innerHTML='';return;}
+  if(i>=sol.stops.length){renderFinish();return;}
+  $('doneBtn').classList.remove('hide');
+  const n=sol.stops[i],leg=sol.legs[i];
+  let bikes='';n.items.forEach(it=>{bikes+=`<div class="bike"><span class="bn">${it.bike}</span>`+
+    `<span class="bw">${it.why||'-'}</span>${it.dock?`<span class="bd">柱${it.dock}</span>`:''}<span class="bs ${it.src}">${it.src||''}</span></div>`;});
+  const cum=APP.cum+leg.min;const pct=Math.min(100,cum/APP.budget*100);const pgc=pct<60?'':pct<85?'warn':'over';
+  const gmap=`https://www.google.com/maps/dir/?api=1&destination=${n.la},${n.lo}&travelmode=driving`;
+  box.innerHTML=`<div class="task-card">
+    <div class="task-head"><div class="badge">維修</div>
+      <div class="task-title"><div class="tgt">${n.st}</div><div class="sub">${n.code||''} · 本站 ${n.q} 台待維修</div></div>
+      <div class="task-load"><div class="n">${n.q}</div><div class="u">台</div></div></div>
+    <div class="link-bar"><span>🚚 由 ${i===0?APP.posLabel:sol.stops[i-1].st} 前往 <b>${n.st}</b></span><span class="lk-time">${Math.ceil(leg.min)}分 · ${leg.km.toFixed(1)}km</span></div>
+    <div class="bikes">${bikes}</div>
+    <div class="nav-bar"><a class="nav-btn" href="${gmap}" target="_blank">▸ Google 導航到此站</a></div>
+    <div class="est-line">⏱ 到站累計行車 <b>${Math.ceil(cum)}</b> / ${APP.budget} 分</div>
+    <div class="pg-wrap"><div class="pg-track"><div class="pg-fill ${pgc}" style="width:${pct}%"></div></div><div class="pg-txt">${pct.toFixed(0)}%</div></div>
+  </div>`;
+  const leftQ=nodesLeftQ();const leftS=sol.stops.length-sol.stops.slice(0,i).length;
+  $('leftBox').innerHTML='';
+  $('miniInfo').innerHTML=`本班共 ${sol.stops.length} 站 / ${sol.totalQ} 台・<a id="reSolve">依現在位置時間重算</a>`;
+  $('reSolve').onclick=reSolve;
+}
+function nodesLeftQ(){return APP.sol.stops.slice(APP.idx+1).reduce((s,n)=>s+n.q,0);}
+
+function renderFinish(){const sol=APP.sol;
+  $('taskBox').innerHTML=`<div class="fin"><div class="big">✔ 班次完成</div>
+    <div class="lbl">本 ${APP.budget} 分鐘維修班次已全數完成</div>
+    <div class="fin-grid"><div class="cg"><div class="v">${sol.totalQ}</div><div class="l">維修工量(台)</div></div>
+      <div class="cg"><div class="v">${sol.stops.length}</div><div class="l">停靠站</div></div>
+      <div class="cg"><div class="v">${Math.round(sol.totalMin)}</div><div class="l">行車(分)</div></div></div>
+    <button class="btn done" id="nextShift" type="button" style="width:100%">🔄 依現在位置/時間派下一班</button></div>`;
+  $('doneBtn').classList.add('hide');$('miniInfo').innerHTML='';$('leftBox').innerHTML='';
+  $('nextShift').onclick=reSolve;
+}
+
+/* 完成本站 → 位置移到本站,下一站 */
+$('doneBtn').onclick=async()=>{const sol=APP.sol,i=APP.idx;const n=sol.stops[i];
+  if(n){APP.cum+=sol.legs[i].min;const cur=APP.myActs[i];if(cur){cur.status='已完成';cur.doneTs=Date.now();await upsertAct(cur);}
+    APP.pos={st:n.st,la:n.la,lo:n.lo};APP.posLabel=n.st;}
+  APP.idx++;const nx=APP.myActs[APP.idx];if(nx){nx.status='進行中';await upsertAct(nx);}
+  renderFeed();renderTask();drawMap();window.scrollTo(0,0);};
+
+/* 重算 */
+async function reSolve(){let t=new Date().getHours();if(t<6)t=6;if(t>23)t=23;APP.t=t;const spd=spdAt(t);
+  await releaseMine();await loadWorkorders();APP.acts=await Store.load(APP.zone);
+  const claimed=claimedBikes(APP.acts);let nodes=clusterStations(APP.zone,claimed);
+  await loadRouteMatrix(APP.pos,nodes);
+  APP.sol=planRoute(APP.pos,nodes,APP.budget,spd);APP.claimSig=claimSig(APP.acts);APP.idx=0;APP.cum=0;
+  await claimSchedule();renderChips();renderFeed();renderTask();drawMap();window.scrollTo(0,0);}
+
+$('backBtn').onclick=async()=>{await releaseMine();$('scrTask').classList.add('hide');$('scrForm').classList.remove('hide');};
+
+/* 30 秒同步同區動態 */
+setInterval(async()=>{if(!APP.zone||$('scrTask').classList.contains('hide'))return;if(document.hidden)return;
+  APP.acts=await Store.load(APP.zone);renderFeed();renderTask();},30000);
+if(BC)BC.onmessage=async e=>{if(e.data===APP.zone){APP.acts=await Store.load(APP.zone);renderFeed();renderTask();}};
+
+/* ═══ 地圖 ═══ */
+let mapObj=null;
+async function drawMap(){const sol=APP.sol,el=$('map');
+  if(mapObj){mapObj.remove();mapObj=null;}
+  if(!sol||!sol.stops.length){el.innerHTML='';el.classList.add('hide');return;}
+  el.classList.remove('hide');el.innerHTML='';
+  if(typeof L==='undefined'){
+    el.innerHTML='<div class="map-fallback">地圖元件暫時無法載入。任務清單與 Google 導航仍可正常使用。</div>';
+    return;
+  }
+  const pts=[APP.pos,...sol.stops];
+  mapObj=L.map('map',{zoomControl:true});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(mapObj);
+  L.circleMarker([APP.pos.la,APP.pos.lo],{radius:7,color:'#1c1a12',fillColor:'#f4ca00',fillOpacity:1}).addTo(mapObj).bindPopup('起點');
+  sol.stops.forEach((n,i)=>{const done=i<APP.idx;L.marker([n.la,n.lo]).addTo(mapObj).bindPopup(`${i+1}. ${n.st}(${n.q}台)${done?' ✔':''}`);});
+  try{const co=pts.slice(0,24).map(p=>p.lo+','+p.la).join(';');
+    const r=await fetch(ROUTE_BASE+'/route/v1/driving/'+co+'?overview=full&geometries=geojson');const j=await r.json();
+    if(j.code==='Ok')L.polyline(j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),{color:'#1c1a12',weight:4,opacity:.8}).addTo(mapObj);
+    else throw 0;
+  }catch(e){L.polyline(pts.map(p=>[p.la,p.lo]),{color:'#1c1a12',weight:3,dashArray:'6,6',opacity:.7}).addTo(mapObj);}
+  mapObj.fitBounds(L.latLngBounds(pts.map(p=>[p.la,p.lo])),{padding:[25,25]});setTimeout(()=>mapObj.invalidateSize(),200);}
+
+/* ═══ 監控上傳 ═══ */
+function toggleMonitor(){const card=$('monCard'),open=card.classList.toggle('open');$('monToggle').setAttribute('aria-expanded',String(open));}
+$('monToggle').onclick=toggleMonitor;
+$('monToggle').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleMonitor();}};
+$('upDrop').onclick=()=>$('fileIn').click();
+$('fileIn').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)parseXlsx(f);};
+function parseXlsx(file){const st=$('upStatus');st.className='up-status';
+  if(typeof XLSX==='undefined'){st.className='up-status err';st.textContent='✖ Excel 解析元件載入失敗,請確認網路後重試';return;}
+  st.textContent='讀取中…';
+  const rd=new FileReader();
+  rd.onload=async ev=>{try{
+    const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
+    const sn=wb.SheetNames.find(n=>n.includes('派工總表'));if(!sn)throw new Error('找不到「派工總表」工作表');
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});const out=[];
+    for(let i=3;i<rows.length;i++){const r=rows[i];const bike=(''+(r[2]||'')).trim();if(!bike)continue;
+      const lock=(''+(r[3]||'')).trim(),dock=(''+(r[4]||'')).trim(),why=(''+(r[5]||'')).trim(),src=(''+(r[6]||'')).trim(),co=(''+(r[7]||'')).trim(),zc=(''+(r[9]||'')).trim();
+      let la=null,lo=null;if(co.includes(',')){const p=co.split(',');const a=parseFloat(p[0]),b=parseFloat(p[1]);if(!isNaN(a)&&!isNaN(b)){la=a;lo=b;}}
+      const m=lock.match(/^(\d{9})(.*)$/);const code=m?m[1]:'',stn=m?m[2]:lock;const c=classify(zc);
+      out.push({bike,code,st:stn,dock,why,src,la,lo,zc,area:c.area,depot:c.depot,big:c.big});}
+    if(!out.length)throw new Error('未讀到工單(確認為 2.0派工總表 格式)');
+    await pushWorkorders(out);
+    st.className='up-status ok';const wc=out.filter(x=>x.la!=null).length;
+    st.textContent=`✔ 已載入 ${out.length} 筆(${wc} 筆有座標)${SYNC_URL?',已推送全區':',已存本機'}。`;
+    renderZoneSummary();initForm();$('srcNote').textContent='資料來源:本次上傳';
+  }catch(err){st.className='up-status err';st.textContent='✖ '+err.message;}};
+  rd.readAsArrayBuffer(file);}
+
+/* ═══ 初始化 ═══ */
+(async()=>{const src=await loadWorkorders();renderZoneSummary();initForm();
+  $('srcNote').textContent='資料來源:'+(src==='gas'?'雲端(GAS)':src==='local'?'本機快取':'內建預設(尚未上傳)');
+  if(SYNC_URL&&src!=='gas'){$('srcNote').textContent+='(雲端讀取失敗,暫用備援)';}
+})();
+</script>
+</body>
+</html>
