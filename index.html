@@ -97,22 +97,23 @@
       <div class="card">
         <div class="field">
           <label for="employee">員工編號 <span class="req">*</span></label>
-          <input id="employee" placeholder="例：A12345" value="A12345">
+          <input id="employee" placeholder="例：A12345" autocomplete="off">
         </div>
         <div class="field">
           <label for="zone">責任分區 <span class="req">*</span></label>
-          <select id="zone"><option value="">— 請選責任分區 —</option><option selected>G1｜中和區</option><option>G2｜永和區</option><option>D1｜板橋區</option><option>D2｜土城區</option></select>
+          <select id="zone"><option value="">正在讀取派工總表…</option></select>
         </div>
         <div class="field">
           <label for="vehicle">車號 / 車牌 <span class="req">*</span></label>
-          <input id="vehicle" placeholder="例：KEA-1234" value="KEA-1234">
+          <input id="vehicle" placeholder="例：KEA-1234" autocomplete="off">
         </div>
         <div class="field">
           <label for="location">目前地點 <span class="req">*</span></label>
           <div class="location-row">
-            <input id="location" placeholder="輸入場站名稱 或 緯度,經度" value="捷運中和站">
+            <input id="location" list="stationList" placeholder="輸入場站名稱 或 緯度,經度" autocomplete="off">
             <button class="locate" id="locateBtn" type="button">📍 定位</button>
           </div>
+          <datalist id="stationList"></datalist>
         </div>
         <div class="field">
           <label for="shift">班別 <span class="req">*</span></label>
@@ -162,13 +163,14 @@
     </section>
   </main>
 </div>
-<div class="demo-nav" aria-label="預覽畫面切換">
-  <button id="showLogin">登入頁</button><button id="showDashboard" class="active">派工頁</button>
-</div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   const SYNC_URL="https://script.google.com/macros/s/AKfycbydwoiMGGsP3XQJBhs6BxRiwWF8bBoIfCZ6GjJH7HIUkQLmRlqCyfGvWycsYed7VAUb/exec";
   const COMPLETION_SHEET_URL="https://docs.google.com/spreadsheets/d/1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo/gviz/tq?headers=1&sheet=%E7%B6%AD%E4%BF%AE%E5%AE%8C%E6%88%90%E7%B4%80%E9%8C%84";
+  const DISPATCH_SHEET_URL="https://docs.google.com/spreadsheets/d/1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo/gviz/tq?headers=3&sheet=%E6%B4%BE%E5%B7%A5%E7%B8%BD%E8%A1%A8";
+  const ZONE_INFO={G1:"中和區",G2:"永和區",K1:"板橋區",K2:"土城區",B0:"台大校內外",B1:"大安區",B2:"文山區",J:"新店分區",C1:"大同區",D1:"萬華區",D2:"中正區",H:"蘆洲區（五股）",H1:"三重區",H2:"林口分區",E1:"士林區",E2:"北投區",L:"淡水分區",A2:"南港區",F:"七星分區",N:"瑞芳分區",C2:"中山區",A3:"內湖區",A1:"信義區",C3:"松山區",I:"新莊區",M:"樹三鶯區"};
+  const ZONE_ORDER=["G1","G2","K1","K2","B0","B1","B2","J","C1","D1","D2","E1","E2","L","A2","F","N","C2","A3","A1","C3","H","H1","H2","I","M"];
+  let dispatchFormRows=[];
   const routes=[
     {id:"LOWBAT-500207003-117357-120683",station:"漳和國中",code:"500207003",km:"0.8 km",mins:"4 分",need:2,vehicles:[["117357","3% 2.0低電量禁用（優先）","2.0"],["120683","7% 2.0E低電量禁用（優先）","2.0E"]]},
     {id:"LOWBAT-500204090-030522-021588-026017",station:"枋寮公園",code:"500204090",km:"1.6 km",mins:"6 分",need:3,vehicles:[["030522","6% 2.0低電量禁用（優先）","2.0"],["021588","8% 2.0低電量禁用（優先）","2.0"],["026017","7% 2.0E低電量禁用（優先）","2.0E"]]},
@@ -226,19 +228,75 @@
       </article>`).join("");
     document.querySelectorAll("[data-work-order-id]").forEach(btn=>btn.addEventListener("click",()=>completeWorkOrder(btn.dataset.workOrderId,btn)));
   }
-  function fetchCompletionSheet(){
+  function fetchSheetData(url,prefix){
     return new Promise((resolve,reject)=>{
-      const callback=`completionSheet_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const callback=`${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const script=document.createElement("script");
-      const timer=setTimeout(()=>finish(new Error("completion sheet timeout")),10000);
+      const timer=setTimeout(()=>finish(new Error("sheet timeout")),10000);
       function finish(error,data){
         clearTimeout(timer);delete window[callback];script.remove();
         error?reject(error):resolve(data);
       }
       window[callback]=data=>finish(null,data);
-      script.onerror=()=>finish(new Error("completion sheet unavailable"));
-      script.src=`${COMPLETION_SHEET_URL}&tqx=out:json;responseHandler:${callback}&_=${Date.now()}`;
+      script.onerror=()=>finish(new Error("sheet unavailable"));
+      script.src=`${url}&tqx=out:json;responseHandler:${callback}&_=${Date.now()}`;
       document.head.appendChild(script);
+    });
+  }
+  const fetchCompletionSheet=()=>fetchSheetData(COMPLETION_SHEET_URL,"completionSheet");
+  const cellValue=(row,index)=>{
+    const cell=index>=0&&row.c&&row.c[index];
+    return cell==null||cell.v==null?"":String(cell.f??cell.v).trim();
+  };
+  async function loadDispatchFormData(){
+    const zoneSelect=document.getElementById("zone");
+    try{
+      const data=await fetchSheetData(DISPATCH_SHEET_URL,"dispatchSheet");
+      const labels=(data.table.cols||[]).map(col=>String(col.label||"").trim());
+      const indexes={
+        vehicle:labels.indexOf("車號"),station:labels.indexOf("鎖車場站"),
+        reason:labels.indexOf("維修通報原因"),coords:labels.indexOf("座標"),
+        zone:labels.indexOf("區域代號"),completed:labels.indexOf("完成註記")
+      };
+      if(indexes.station<0||indexes.reason<0||indexes.zone<0)throw new Error("dispatch columns missing");
+      dispatchFormRows=(data.table.rows||[]).map(row=>({
+        vehicle:cellValue(row,indexes.vehicle),
+        stationRaw:cellValue(row,indexes.station),
+        reason:cellValue(row,indexes.reason),
+        coords:cellValue(row,indexes.coords),
+        zone:cellValue(row,indexes.zone),
+        completed:indexes.completed>=0?cellValue(row,indexes.completed):""
+      })).filter(row=>row.zone&&row.reason.includes(DISPATCH_KEYWORD)&&row.completed!=="已完成");
+      const counts={};
+      dispatchFormRows.forEach(row=>counts[row.zone]=(counts[row.zone]||0)+1);
+      zoneSelect.innerHTML='<option value="">— 請選責任分區 —</option>';
+      ZONE_ORDER.forEach(zone=>{
+        const option=document.createElement("option");
+        option.value=zone;
+        option.textContent=`${zone}｜${ZONE_INFO[zone]||zone}（${counts[zone]||0} 台）`;
+        zoneSelect.appendChild(option);
+      });
+      [...new Set(dispatchFormRows.map(row=>row.zone))].filter(zone=>!ZONE_ORDER.includes(zone)).sort().forEach(zone=>{
+        const option=document.createElement("option");
+        option.value=zone;option.textContent=`${zone}（${counts[zone]||0} 台）`;zoneSelect.appendChild(option);
+      });
+      buildStationList();
+    }catch(error){
+      zoneSelect.innerHTML='<option value="">派工總表讀取失敗，請重新整理</option>';
+      zoneSelect.disabled=true;
+    }
+  }
+  function buildStationList(){
+    const zone=document.getElementById("zone").value;
+    const list=document.getElementById("stationList");
+    list.innerHTML="";
+    const seen=new Set();
+    dispatchFormRows.forEach(row=>{
+      if(zone&&row.zone!==zone)return;
+      const station=row.stationRaw.replace(/^\d{9}/,"").trim()||row.stationRaw;
+      if(!station||seen.has(station))return;
+      seen.add(station);
+      const option=document.createElement("option");option.value=station;list.appendChild(option);
     });
   }
   async function loadCompletedRecords(){
@@ -301,8 +359,6 @@
     const login=view==="login";
     document.getElementById("loginView").classList.toggle("hidden",!login);
     document.getElementById("dashboardView").classList.toggle("hidden",login);
-    document.getElementById("showLogin").classList.toggle("active",login);
-    document.getElementById("showDashboard").classList.toggle("active",!login);
     if(!login)setTimeout(()=>{initMap();map&&map.invalidateSize()},80);
     window.scrollTo({top:0,behavior:"instant"});
   }
@@ -318,11 +374,18 @@
     document.getElementById("profileShift").textContent=document.getElementById("shift").value;
     show("dashboard");
   };
-  document.getElementById("locateBtn").onclick=()=>{document.getElementById("location").value="捷運中和站";document.getElementById("locateBtn").textContent="✓ 已定位"};
-  document.getElementById("showLogin").onclick=()=>show("login");
-  document.getElementById("showDashboard").onclick=()=>show("dashboard");
+  document.getElementById("zone").addEventListener("change",buildStationList);
+  document.getElementById("locateBtn").onclick=()=>{
+    const button=document.getElementById("locateBtn");
+    if(!navigator.geolocation){document.getElementById("formError").textContent="此裝置不支援定位";return}
+    button.textContent="定位中…";
+    navigator.geolocation.getCurrentPosition(position=>{
+      const lat=position.coords.latitude.toFixed(5),lng=position.coords.longitude.toFixed(5);
+      document.getElementById("location").value=`${lat},${lng}`;button.textContent="✓ 已定位";
+    },()=>{button.textContent="📍 定位";document.getElementById("formError").textContent="定位失敗，請輸入場站名稱或座標"},{enableHighAccuracy:true,timeout:10000});
+  };
   setInterval(()=>document.getElementById("clock").textContent=new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"}),1000);
-  renderTasks();loadCompletedRecords();show("dashboard");
+  renderTasks();loadCompletedRecords();loadDispatchFormData();show("login");
 </script>
 </body>
 </html>
