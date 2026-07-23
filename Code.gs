@@ -9,12 +9,32 @@ var APP_PREFIX = 'maint_dispatch_v1:';
 var CHUNK_SIZE = 6500; // Script Properties 單值限制內的安全大小（Base64 字元）
 var MAX_ZONE_ACTS = 200;
 var ACT_TTL_MS = 12 * 60 * 60 * 1000;
+var MAX_COMPLETED = 5000;
+
+// 貼上低電量派工 Google 表單的 ID 後，手動執行一次 setupDispatchForm。
+// 表單網址若為 https://docs.google.com/forms/d/ABC123/edit，ID 就是 ABC123。
+var GOOGLE_FORM_ID = '';
+var WORK_ORDER_FIELD = '工單編號（系統比對用）';
+var COMPLETION_SPREADSHEET_ID = '1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo';
+var COMPLETION_SHEET_NAME = '維修完成紀錄';
 
 function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
     if (String(p.wo || '') === '1') {
       return jsonOutput_(readJson_('workorders', []));
+    }
+    if (String(p.completed || '') === '1') {
+      return jsonOutput_(readCompletedSheet_());
+    }
+    if (p.checkId) {
+      var checkId = normalizeWorkOrderId_(p.checkId);
+      var completed = readJson_('completed', []);
+      return jsonOutput_({
+        ok: true,
+        id: checkId,
+        completed: completed.some(function (x) { return x && x.id === checkId; })
+      });
     }
     var zone = safeKey_(p.zone || '');
     if (!zone) return jsonOutput_([]);
@@ -33,8 +53,46 @@ function doPost(e) {
 
     if (op === 'setWO') {
       if (!Array.isArray(body.items)) throw new Error('items 必須是陣列');
-      writeJson_('workorders', body.items);
-      return jsonOutput_({ ok: true, count: body.items.length });
+      var completedIds = completedIdMap_();
+      var dispatchable = body.items.filter(function (item) {
+        var id = normalizeWorkOrderId_(item && item.id);
+        return id && !completedIds[id] && !isCompleted_(item) && isLowBatteryDisabled_(item);
+      });
+      writeJson_('workorders', dispatchable);
+      return jsonOutput_({
+        ok: true,
+        count: dispatchable.length,
+        skipped: body.items.length - dispatchable.length
+      });
+    }
+
+    if (op === 'completeWO') {
+      var workOrderId = normalizeWorkOrderId_(body.id);
+      if (!workOrderId) throw new Error('缺少工單編號 id');
+      var done = readJson_('completed', []);
+      var existing = -1;
+      for (var d = 0; d < done.length; d++) {
+        if (done[d] && done[d].id === workOrderId) { existing = d; break; }
+      }
+      var completedRec = {
+        id: workOrderId,
+        completedAt: body.completedAt || new Date().toISOString(),
+        employee: String(body.employee || ''),
+        station: String(body.station || ''),
+        zone: String(body.zone || ''),
+        vehicleIds: Array.isArray(body.vehicleIds) ? body.vehicleIds : []
+      };
+      if (existing >= 0) done[existing] = completedRec;
+      else done.push(completedRec);
+      done = done.slice(-MAX_COMPLETED);
+      writeJson_('completed', done);
+
+      // 同步從待派清單移除，避免下一台裝置仍讀到舊工單。
+      var pending = readJson_('workorders', []).filter(function (item) {
+        return normalizeWorkOrderId_(item && item.id) !== workOrderId;
+      });
+      writeJson_('workorders', pending);
+      return jsonOutput_({ ok: true, id: workOrderId, duplicate: existing >= 0 });
     }
 
     var zone = safeKey_(body.zone || '');
@@ -74,6 +132,86 @@ function doPost(e) {
   } finally {
     try { lock.releaseLock(); } catch (_) {}
   }
+}
+
+/**
+ * 手動執行一次：在 Google 表單新增「工單編號（系統比對用）」欄位。
+ * 若欄位已存在，不會重複新增。
+ */
+function setupDispatchForm() {
+  if (!GOOGLE_FORM_ID) throw new Error('請先設定 GOOGLE_FORM_ID');
+  var form = FormApp.openById(GOOGLE_FORM_ID);
+  var items = form.getItems();
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].getTitle() === WORK_ORDER_FIELD) {
+      return { ok: true, created: false, message: '欄位已存在' };
+    }
+  }
+  form.addTextItem()
+    .setTitle(WORK_ORDER_FIELD)
+    .setHelpText('請勿自行修改；系統使用此編號比對完成紀錄，避免重複派工。')
+    .setRequired(true);
+  return { ok: true, created: true, message: '欄位新增完成' };
+}
+
+function completedIdMap_() {
+  var rows = readJson_('completed', []);
+  var map = {};
+  rows.forEach(function (row) {
+    var id = normalizeWorkOrderId_(row && row.id);
+    if (id) map[id] = true;
+  });
+  return map;
+}
+
+function normalizeWorkOrderId_(value) {
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 120);
+}
+
+function readCompletedSheet_() {
+  var sheet = SpreadsheetApp.openById(COMPLETION_SPREADSHEET_ID).getSheetByName(COMPLETION_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  var values = sheet.getDataRange().getDisplayValues();
+  var headers = values.shift();
+  var stationIndex = headers.indexOf('場站代碼');
+  var vehicleIndex = headers.indexOf('自行車號');
+  var reasonIndex = headers.indexOf('維修原因');
+  var completedIndex = headers.indexOf('完成時間');
+  var recordIndex = headers.indexOf('紀錄ID');
+  if (stationIndex < 0 || vehicleIndex < 0) throw new Error('維修完成紀錄缺少場站代碼或自行車號欄位');
+  return values.filter(function (row) {
+    return row[stationIndex] && row[vehicleIndex];
+  }).map(function (row) {
+    return {
+      id: recordIndex >= 0 ? row[recordIndex] : '',
+      stationCode: row[stationIndex],
+      vehicleId: row[vehicleIndex],
+      reason: reasonIndex >= 0 ? row[reasonIndex] : '',
+      completedAt: completedIndex >= 0 ? row[completedIndex] : ''
+    };
+  });
+}
+
+function isLowBatteryDisabled_(item) {
+  if (!item || typeof item !== 'object') return false;
+  var reasons = [];
+  if (item.reason) reasons.push(item.reason);
+  if (item.issue) reasons.push(item.issue);
+  if (Array.isArray(item.vehicles)) {
+    item.vehicles.forEach(function (vehicle) {
+      if (Array.isArray(vehicle)) reasons.push(vehicle[1]);
+      else if (vehicle && typeof vehicle === 'object') reasons.push(vehicle.reason || vehicle.issue);
+    });
+  }
+  return reasons.some(function (reason) {
+    return String(reason || '').indexOf('低電量禁用') !== -1;
+  });
+}
+
+function isCompleted_(item) {
+  if (!item || typeof item !== 'object') return false;
+  var value = item.completedNote || item.completionStatus || item.status || '';
+  return String(value).trim() === '已完成';
 }
 
 function pruneActs_(acts) {

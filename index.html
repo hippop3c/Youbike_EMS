@@ -1,634 +1,328 @@
-<!DOCTYPE html>
-<!-- GitHub Pages build · 2026-07-22 -->
+<!doctype html>
 <html lang="zh-Hant">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<meta name="description" content="維護派工：依責任分區、目前位置與行車時間預算規劃維修派工路徑。">
-<meta name="theme-color" content="#f4ca00">
-<meta name="color-scheme" content="light">
-<meta name="format-detection" content="telephone=no">
-<title>維護派工</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<style>
-:root{
-  --yb:#f4ca00; --ink:#1c1a12; --paper:#fbf8ef; --card:#ffffff;
-  --line:#d9d2b8; --muted:#7a745e;
-  --fix:#0b62c4; --fix-bg:#eaf2fc; --ok:#1d9a6c; --warn:#e88600; --over:#e03a2c;
-}
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html{font-size:16px}
-body{font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
-  background:var(--paper);color:var(--ink);min-height:100vh;
-  background-image:repeating-linear-gradient(0deg,transparent,transparent 34px,rgba(28,26,18,.035) 34px,rgba(28,26,18,.035) 35px)}
-.wrap{max-width:540px;margin:0 auto;padding:0 14px 90px}
-header{background:var(--yb);margin:0 -14px 14px;padding:14px 18px 12px;border-bottom:3px solid var(--ink);
-  display:flex;align-items:baseline;justify-content:space-between}
-header h1{font-size:1.06rem;font-weight:900;letter-spacing:.1em}
-header .clock{font-variant-numeric:tabular-nums;font-weight:700;font-size:.9rem}
-.card{background:var(--card);border:1.5px solid var(--ink);border-radius:10px;box-shadow:4px 4px 0 rgba(28,26,18,.15);padding:16px;margin-bottom:16px}
-.fld{margin-bottom:14px}
-.fld label{display:block;font-size:.78rem;font-weight:800;letter-spacing:.1em;margin-bottom:6px}
-.fld label .req{color:var(--over);margin-left:2px}
-.fld input,.fld select{width:100%;font-size:1.05rem;padding:11px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-family:inherit}
-.fld input:focus,.fld select:focus{outline:2px solid var(--yb);border-color:var(--ink)}
-.loc-row{display:flex;gap:8px}.loc-row input{flex:1}
-.gps-btn{flex:none;padding:0 14px;border:1.5px solid var(--ink);border-radius:8px;background:var(--yb);font-weight:800;font-size:.92rem;cursor:pointer;font-family:inherit}
-.gps-btn:active{transform:translate(1px,1px)}
-.hint{font-size:.76rem;color:var(--muted);margin-top:6px;min-height:1em}.hint b{color:var(--ink)}.hint .apply{color:var(--fix);text-decoration:underline;cursor:pointer;margin-left:6px}
-.go-btn{width:100%;margin-top:4px;padding:15px;font-size:1.12rem;font-weight:900;letter-spacing:.2em;background:var(--ink);color:var(--yb);border:none;border-radius:10px;cursor:pointer;font-family:inherit;box-shadow:4px 4px 0 rgba(28,26,18,.25)}
-.go-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(28,26,18,.25)}
-.err{color:var(--over);font-size:.85rem;margin-top:10px;font-weight:700;min-height:1em}
-/* 監控 */
-.mon{border-style:dashed;background:#faf6e8}
-.mon-h{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;font-weight:900;letter-spacing:.05em}
-.mon-h .tag{font-size:.66rem;background:var(--ink);color:var(--yb);border-radius:5px;padding:2px 7px}
-.mon-h .arw{margin-left:auto;transition:transform .2s}.mon.open .mon-h .arw{transform:rotate(90deg)}
-.mon-body{display:none;margin-top:12px}.mon.open .mon-body{display:block}
-.up-drop{border:1.5px dashed var(--ink);border-radius:8px;padding:16px;text-align:center;background:#fff;cursor:pointer}
-.up-drop:active{background:#fdf7e2}.up-drop .big{font-size:.98rem;font-weight:800}.up-drop .sub{font-size:.74rem;color:var(--muted);margin-top:4px}
-.up-status{font-size:.78rem;font-weight:700;margin-top:10px;min-height:1em}.up-status.ok{color:var(--ok)}.up-status.err{color:var(--over)}
-.zsum{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px}
-.zbox{border:1.2px solid var(--ink);border-radius:8px;padding:8px 4px;text-align:center;background:#fff}
-.zbox .zn{font-size:.72rem;font-weight:900}.zbox .zc{font-size:1.35rem;font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums}.zbox .zl{font-size:.6rem;color:var(--muted);font-weight:700}
-.zbox.北{border-top:4px solid #5b6cb5}.zbox.東{border-top:4px solid #c85a2b}.zbox.南{border-top:4px solid #1d9a6c}.zbox.西{border-top:4px solid #8a4fbf}
-.src-note{font-size:.72rem;color:var(--muted);font-weight:700;margin-top:8px}
-/* feed */
-.feed{background:var(--card);border:1.5px solid var(--ink);border-radius:12px;box-shadow:4px 4px 0 rgba(28,26,18,.12);margin-bottom:14px;overflow:hidden}
-.feed-h{display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--yb);padding:7px 12px;font-size:.8rem;font-weight:800}
-.feed-h .note{color:#ffd;font-weight:700;font-size:.7rem}.feed-h a{margin-left:auto;color:var(--yb);text-decoration:underline;cursor:pointer;font-size:.74rem}
-.feed ul{list-style:none;max-height:190px;overflow-y:auto}
-.feed li{padding:8px 12px;border-bottom:1px dashed var(--line);font-size:.8rem}.feed li:last-child{border-bottom:none}
-.feed .frow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.feed .froute{color:var(--muted);font-size:.72rem;margin-top:2px}
-.feed .ftime{margin-left:auto;color:var(--muted);font-size:.7rem;font-variant-numeric:tabular-nums}
-.fst{flex:none;font-size:.66rem;font-weight:900;border-radius:5px;padding:1px 6px;color:#fff}.fst.run{background:var(--fix)}.fst.done{background:var(--ok)}.fst.todo{background:#6c7a8e}
-.fme{background:var(--yb);border:1px solid var(--ink);border-radius:4px;font-size:.6rem;font-weight:900;padding:0 4px;margin-left:4px}
-.fkind{font-weight:900;color:var(--fix)}
-.feed .fempty{padding:12px;text-align:center;color:var(--muted);font-size:.78rem;font-weight:700}
-.rpt{padding:10px 12px;border-bottom:1.5px dashed var(--line);background:#faf6e8}
-.rpt .row{display:flex;gap:6px;margin-bottom:8px}
-.rpt input,.rpt select{padding:9px;border:1.2px solid var(--line);border-radius:8px;font-size:.9rem;font-family:inherit;background:#fff}
-.rpt .r-st{flex:1;min-width:0}.rpt .r-q{width:64px}
-.rpt .r-send{width:100%;padding:10px;border:1.5px solid var(--ink);border-radius:8px;background:var(--yb);font-weight:900;cursor:pointer;font-family:inherit}
-/* chips */
-.chiprow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin:10px 0}
-.chip{background:var(--card);border:1.2px solid var(--ink);border-radius:999px;font-size:.68rem;padding:4px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
-.chip span{color:var(--muted);margin-right:2px}
-@media(max-width:420px){.chip{font-size:.62rem}}
-.stepline{font-size:.78rem;color:var(--muted);font-weight:700;margin:4px 2px 10px}.stepline b{color:var(--ink)}
-#map{height:200px;border:1.5px solid var(--ink);border-radius:10px;margin-bottom:14px}
-.map-fallback{height:100%;display:grid;place-items:center;text-align:center;padding:18px;color:var(--muted);font-size:.82rem;font-weight:700;background:#faf6e8;border-radius:8px}
-.noscript{color:var(--over);font-size:.86rem;font-weight:800}
-/* task card */
-.task-card{background:var(--card);border:1.5px solid var(--ink);border-radius:12px;box-shadow:5px 5px 0 rgba(28,26,18,.15);overflow:hidden;margin-bottom:14px}
-.task-head{padding:12px 14px;display:flex;align-items:center;gap:10px;border-bottom:1.5px dashed var(--line);background:var(--fix-bg)}
-.badge{flex:none;font-size:1rem;font-weight:900;color:#fff;background:var(--fix);border-radius:8px;padding:6px 12px;letter-spacing:.15em}
-.task-title{flex:1}.task-title .tgt{font-size:1.18rem;font-weight:900;line-height:1.25}.task-title .sub{font-size:.76rem;color:var(--muted);font-weight:700;margin-top:2px}
-.task-load{flex:none;text-align:center}.task-load .n{font-size:1.7rem;font-weight:900;line-height:1}.task-load .u{font-size:.7rem;color:var(--muted);font-weight:700}
-.link-bar{display:flex;align-items:center;gap:8px;background:#f1ecdc;padding:8px 14px;font-size:.8rem;font-weight:700;border-bottom:1.5px dashed var(--line)}
-.link-bar .lk-time{margin-left:auto;font-variant-numeric:tabular-nums}
-.bikes{padding:8px 14px}
-.bike{display:flex;gap:8px;font-size:.82rem;padding:6px 0;border-bottom:1px dashed var(--line);align-items:center}.bike:last-child{border-bottom:none}
-.bike .bn{font-weight:900;font-variant-numeric:tabular-nums;flex:none;background:#eef;border:1px solid var(--line);border-radius:4px;padding:0 6px}
-.bike .bw{color:var(--muted);flex:1}.bike .bd{flex:none;color:var(--muted);font-size:.72rem}
-.bike .bs{flex:none;font-size:.62rem;font-weight:900;border-radius:4px;padding:1px 5px;color:#fff;background:#6c7a8e}
-.bike .bs.撿尾,.bike .bs.客專撿尾{background:var(--over)}.bike .bs.維修通報{background:var(--fix)}.bike .bs.客服{background:var(--warn)}
-.nav-bar{padding:0 14px 12px}.nav-btn{display:inline-block;font-size:.82rem;font-weight:800;color:var(--fix);text-decoration:underline;cursor:pointer}
-.est-line{padding:0 14px 10px;font-size:1rem;font-weight:800}.est-line b{font-size:1.3rem}
-.pg-wrap{padding:0 14px 14px}.pg-track{height:10px;border:1.2px solid var(--ink);border-radius:99px;overflow:hidden;background:#fff}
-.pg-fill{height:100%;background:var(--yb);transition:width .4s}.pg-fill.warn{background:var(--warn)}.pg-fill.over{background:var(--over)}
-.pg-txt{font-size:.72rem;color:var(--muted);font-weight:700;margin-top:4px;text-align:right}
-.act-row{display:flex;gap:10px;margin-top:4px}
-.btn{flex:1;padding:14px;font-size:1.02rem;font-weight:900;border-radius:10px;cursor:pointer;font-family:inherit;border:1.5px solid var(--ink);letter-spacing:.08em}
-.btn.done{background:var(--ok);color:#fff;border-color:var(--ok)}.btn.ghost{background:#fff}.btn:active{transform:translate(1px,1px)}
-.mini{font-size:.78rem;color:var(--muted);text-align:center;margin-top:12px;font-weight:700}.mini a{color:var(--fix);cursor:pointer;text-decoration:underline}
-.fin{background:var(--card);border:1.5px solid var(--ink);border-radius:12px;text-align:center;padding:28px 16px;box-shadow:5px 5px 0 rgba(28,26,18,.15)}
-.fin .big{font-size:2.2rem;font-weight:900}.fin .lbl{font-size:.85rem;color:var(--muted);font-weight:700;margin-bottom:14px}
-.fin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0 20px}
-.cg{border:1.2px solid var(--line);border-radius:8px;padding:8px 4px;text-align:center;background:#fff}.cg .v{font-size:1.3rem;font-weight:900}.cg .l{font-size:.62rem;color:var(--muted);font-weight:700}
-.empty{background:var(--card);border:1.5px dashed var(--ink);border-radius:12px;text-align:center;padding:34px 16px;font-weight:700;color:var(--muted)}
-.leftover{background:#faf6e8;border:1.2px dashed var(--ink);border-radius:8px;padding:10px 12px;font-size:.78rem;color:var(--muted);font-weight:700;margin-bottom:14px}
-.sync-toast{position:fixed;left:50%;bottom:18px;z-index:9999;max-width:min(480px,calc(100vw - 28px));transform:translate(-50%,18px);opacity:0;pointer-events:none;padding:10px 14px;border:1.5px solid var(--ink);border-radius:10px;background:#fff;box-shadow:4px 4px 0 rgba(28,26,18,.2);font-size:.82rem;font-weight:800;line-height:1.45;transition:opacity .2s,transform .2s}
-.sync-toast.show{opacity:1;transform:translate(-50%,0)}.sync-toast.ok{border-left:7px solid var(--ok)}.sync-toast.warn{border-left:7px solid var(--warn)}.sync-toast.err{border-left:7px solid var(--over)}
-.sheet-sync{margin-top:12px;border:1.2px solid var(--ink);border-radius:9px;background:#fff;padding:11px}
-.sheet-sync-h{display:flex;align-items:center;gap:8px;font-size:.8rem;font-weight:900;margin-bottom:8px}.sheet-sync-h a{margin-left:auto;color:var(--fix);font-size:.72rem;text-decoration:underline}
-.sheet-sync-row{display:flex;gap:6px}.sheet-sync-row input{flex:1;min-width:0;padding:9px;border:1.2px solid var(--line);border-radius:8px;font-size:.78rem;font-family:inherit}
-.sheet-sync-row button{flex:none;padding:8px 10px;border:1.2px solid var(--ink);border-radius:8px;background:var(--yb);font-size:.76rem;font-weight:900;font-family:inherit;cursor:pointer}
-.sheet-sync-row .clear{background:#fff}.sheet-sync-status{min-height:1.2em;margin-top:7px;font-size:.72rem;font-weight:800;color:var(--muted)}
-.sheet-sync-status.ok{color:var(--ok)}.sheet-sync-status.warn{color:var(--warn)}.sheet-sync-status.err{color:var(--over)}
-.btn:disabled,.r-send:disabled{opacity:.65;cursor:wait}
-.hide{display:none}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <meta name="theme-color" content="#ffd400">
+  <title>維護派工前台 v1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root{
+      --yellow:#ffd400;--yellow-soft:#fff7c7;--ink:#171713;--paper:#f6f4ed;
+      --card:#fff;--line:#dedbd0;--muted:#77746c;--blue:#1769d2;--green:#168b60;
+      --red:#d5483c;--shadow:0 8px 22px rgba(30,29,23,.08)
+    }
+    *{box-sizing:border-box}
+    html{font-size:16px}
+    body{margin:0;background:var(--paper);color:var(--ink);font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif}
+    button,input,select{font:inherit}
+    button{cursor:pointer}
+    .app{max-width:720px;margin:auto;min-height:100vh;padding-bottom:80px}
+    .topbar{position:sticky;top:0;z-index:500;display:flex;align-items:center;justify-content:space-between;padding:13px 18px;background:var(--yellow);border-bottom:2px solid var(--ink)}
+    .brand{font-weight:900;letter-spacing:.08em}.brand small{font-size:.68rem;margin-left:5px}
+    .clock{font-size:.82rem;font-weight:800;font-variant-numeric:tabular-nums}
+    main{padding:16px}
+    .login-intro{padding:12px 2px 16px}
+    .login-intro .eyebrow,.section-label{font-size:.72rem;font-weight:900;letter-spacing:.13em;color:var(--muted)}
+    .login-intro h1{font-size:1.7rem;line-height:1.2;margin:5px 0}.login-intro p{margin:0;color:var(--muted);font-size:.88rem}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
+    .field{margin-bottom:15px}.field:last-of-type{margin-bottom:18px}
+    .field label{display:block;font-size:.8rem;font-weight:800;margin-bottom:7px}.req{color:var(--red)}
+    .field input,.field select{width:100%;height:48px;border:1.5px solid #cfcbbe;border-radius:10px;background:#fff;padding:0 12px;color:var(--ink)}
+    .field input:focus,.field select:focus{outline:3px solid rgba(255,212,0,.35);border-color:var(--ink)}
+    .location-row{display:flex;gap:8px}.location-row input{min-width:0}
+    .locate{flex:0 0 82px;border:1.5px solid var(--ink);border-radius:10px;background:var(--yellow);font-weight:900}
+    .primary{width:100%;border:0;border-radius:11px;background:var(--ink);color:var(--yellow);font-weight:900;letter-spacing:.14em;padding:15px;box-shadow:4px 4px 0 #bbb7aa}
+    .form-error{min-height:1.2em;color:var(--red);font-size:.78rem;font-weight:700;margin-top:10px}
+    .source-note{display:flex;gap:9px;align-items:center;padding:11px 13px;border:1px dashed #bdb8a7;border-radius:12px;background:#fbfaf5;font-size:.78rem;color:var(--muted)}
+    .source-note b{color:var(--ink)}
+    .hidden{display:none!important}
+    .battery-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}
+    .battery{position:relative;overflow:hidden;border:1.5px solid var(--ink);border-radius:14px;padding:14px;background:#fff}
+    .battery:after{content:"";position:absolute;right:-24px;bottom:-30px;width:85px;height:85px;border-radius:50%;background:var(--yellow-soft)}
+    .battery .type{font-size:.75rem;font-weight:900}.battery .count{position:relative;z-index:1;font-size:2.15rem;font-weight:900;line-height:1.1;margin-top:5px}.battery .unit{font-size:.72rem;color:var(--muted);font-weight:700}
+    .profile{display:grid;grid-template-columns:48px 1fr auto;gap:11px;align-items:center}
+    .avatar{width:48px;height:48px;display:grid;place-items:center;border-radius:13px;background:var(--ink);color:var(--yellow);font-weight:900}
+    .profile h2{font-size:1rem;margin:0 0 3px}.profile p{font-size:.74rem;margin:0;color:var(--muted)}
+    .shift{align-self:start;border-radius:99px;background:var(--yellow);padding:4px 9px;font-size:.7rem;font-weight:900}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:13px}
+    .stat{border-top:1px solid var(--line);padding-top:10px}.stat b{display:block;font-size:.92rem}.stat span{font-size:.66rem;color:var(--muted)}
+    .feed{padding:0;overflow:hidden}
+    .feed-head{display:flex;justify-content:space-between;background:var(--ink);color:var(--yellow);padding:10px 13px;font-size:.78rem;font-weight:900}
+    .feed-head span:last-child{font-size:.68rem;color:#fff}
+    .feed-row{display:grid;grid-template-columns:34px 1fr auto;gap:9px;align-items:center;padding:10px 13px;border-bottom:1px dashed var(--line)}
+    .feed-row:last-child{border:0}.feed-num{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:#eceae1;font-size:.72rem;font-weight:900}
+    .feed-main b{display:block;font-size:.78rem}.feed-main span{font-size:.68rem;color:var(--muted)}
+    .feed-distance{font-size:.68rem;font-weight:800;color:var(--blue)}
+    .map-card{padding:0;overflow:hidden}
+    .map-title{display:flex;justify-content:space-between;align-items:center;padding:12px 14px}
+    .map-title b{font-size:.85rem}.map-title span{font-size:.68rem;color:var(--muted)}
+    #map{height:260px;background:#e9e6dc}
+    .route-summary{padding:10px 14px;font-size:.72rem;font-weight:700;background:#faf8f0;border-top:1px solid var(--line)}
+    .work-title{display:flex;align-items:end;justify-content:space-between;margin:20px 2px 9px}
+    .work-title h2{font-size:1rem;margin:0}.work-title span{font-size:.68rem;color:var(--muted)}
+    .task-card{padding:0;overflow:hidden;border:1.5px solid var(--ink)}
+    .task-top{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:13px;background:#eef4fd}
+    .order{width:35px;height:35px;display:grid;place-items:center;border-radius:9px;background:var(--blue);color:#fff;font-weight:900}
+    .station h3{font-size:1.04rem;margin:0}.station p{font-size:.68rem;color:var(--muted);margin:2px 0 0}.need{text-align:right}.need b{display:block;font-size:1.45rem}.need span{font-size:.62rem;color:var(--muted)}
+    .travel{display:flex;justify-content:space-between;padding:8px 13px;background:#f4f0e4;font-size:.72rem;font-weight:700}
+    .vehicle-list{padding:7px 13px}
+    .vehicle{display:grid;grid-template-columns:72px 1fr auto;gap:8px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:.74rem;align-items:center}
+    .vehicle:last-child{border:0}.plate{font-weight:900;background:#eef0f4;border-radius:5px;text-align:center}.reason{color:var(--muted)}
+    .battery-type{font-size:.62rem;color:#fff;background:#6e7785;border-radius:5px;padding:2px 5px;font-weight:900}
+    .task-actions{display:flex;gap:8px;padding:0 13px 13px}.task-actions button{flex:1;border:1.5px solid var(--ink);border-radius:9px;padding:10px;font-weight:900;background:#fff}.task-actions .done{background:var(--green);color:#fff;border-color:var(--green)}
+    .demo-nav{position:fixed;z-index:600;bottom:15px;left:50%;transform:translateX(-50%);display:flex;gap:6px;padding:5px;background:rgba(23,23,19,.92);border-radius:99px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+    .demo-nav button{border:0;border-radius:99px;padding:8px 13px;background:transparent;color:#fff;font-size:.7rem;font-weight:800}.demo-nav button.active{background:var(--yellow);color:var(--ink)}
+    @media(min-width:620px){
+      .dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.dashboard-grid .card{margin-bottom:0}
+    }
+  </style>
 </head>
 <body>
-<div class="wrap">
-  <header><h1>維護派工</h1><div class="clock" id="clock" aria-label="目前時間"></div></header>
-  <noscript><div class="card noscript">此系統需要啟用 JavaScript 才能進行派工規劃。</div></noscript>
-
-  <!-- 監控上傳 -->
-  <section class="card mon" id="monCard">
-    <div class="mon-h" id="monToggle" role="button" tabindex="0" aria-expanded="false" aria-controls="monBody"><span class="tag">監控</span><span>上傳派工總表 · 自動分區 · 上線</span><span class="arw">▸</span></div>
-    <div class="mon-body" id="monBody">
-      <div class="up-drop" id="upDrop">
-        <div class="big">點此上傳 派工總表.xlsx</div>
-        <div class="sub">讀「2.0派工總表」→ 依區域代號分派至各責任分區 → 推送給同區同仁</div>
-        <input type="file" id="fileIn" accept=".xlsx,.xls" style="display:none">
+<div class="app">
+  <header class="topbar">
+    <div class="brand">維護派工前台 <small>v1</small></div>
+    <div class="clock" id="clock">--:--</div>
+  </header>
+  <main>
+    <section id="loginView">
+      <div class="login-intro">
+        <div class="eyebrow">FIELD SERVICE · FRONT DESK</div>
+        <h1>開始今天的派工</h1>
+        <p>填寫基本資料後，系統將依距離安排低電量工單。</p>
       </div>
-      <div class="up-status" id="upStatus" aria-live="polite"></div>
-      <div class="zsum" id="zsum"></div>
-      <div class="src-note" id="srcNote"></div>
-      <div class="sheet-sync" id="sheetSyncBox">
-        <div class="sheet-sync-h"><span>Google 試算表完成紀錄</span><a id="sheetLink" target="_blank" rel="noopener noreferrer">開啟紀錄表</a></div>
-        <div class="sheet-sync-row">
-          <input id="syncUrlInput" inputmode="url" autocomplete="off" placeholder="貼上 Apps Script /exec 網址" aria-label="Apps Script 網頁應用程式網址">
-          <button id="syncSaveBtn" type="button">儲存測試</button>
-          <button id="syncClearBtn" class="clear" type="button">恢復預設</button>
+      <div class="card">
+        <div class="field">
+          <label for="employee">員工編號 <span class="req">*</span></label>
+          <input id="employee" placeholder="例：A12345" value="A12345">
         </div>
-        <div class="sheet-sync-status" id="syncStatus" aria-live="polite"></div>
+        <div class="field">
+          <label for="zone">責任分區 <span class="req">*</span></label>
+          <select id="zone"><option value="">— 請選責任分區 —</option><option selected>G1｜中和區</option><option>G2｜永和區</option><option>D1｜板橋區</option><option>D2｜土城區</option></select>
+        </div>
+        <div class="field">
+          <label for="vehicle">車號 / 車牌 <span class="req">*</span></label>
+          <input id="vehicle" placeholder="例：KEA-1234" value="KEA-1234">
+        </div>
+        <div class="field">
+          <label for="location">目前地點 <span class="req">*</span></label>
+          <div class="location-row">
+            <input id="location" placeholder="輸入場站名稱 或 緯度,經度" value="捷運中和站">
+            <button class="locate" id="locateBtn" type="button">📍 定位</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="shift">班別 <span class="req">*</span></label>
+          <select id="shift"><option selected>早班</option><option>午班</option><option>晚班</option><option>大夜班</option></select>
+        </div>
+        <button class="primary" id="startBtn" type="button">開始派工</button>
+        <div class="form-error" id="formError"></div>
       </div>
-    </div>
-  </section>
+      <div class="source-note"><span>🔗</span><div><b>派工來源：Google 表單</b><br>僅讀取低電量待處理工單，不提供檔案上傳。</div></div>
+    </section>
 
-  <!-- 表單 -->
-  <section id="scrForm">
-    <div class="card">
-      <div class="fld"><label for="empId">員工編號<span class="req">＊</span></label><input id="empId" autocomplete="off" placeholder="例:A12345" aria-required="true"></div>
-      <div class="fld"><label for="zoneSel">責任分區<span class="req">＊</span></label><select id="zoneSel" aria-required="true"></select></div>
-      <div class="fld"><label for="truckId">車號 / 車牌<span class="req">＊</span></label><input id="truckId" autocomplete="off" placeholder="例:KEA-1234" aria-required="true"></div>
-      <div class="fld"><label for="locInput">目前地點<span class="req">＊</span></label>
-        <div class="loc-row"><input id="locInput" list="stList" autocomplete="off" placeholder="輸入場站名稱 或 緯度,經度" aria-required="true"><button class="gps-btn" id="gpsBtn" type="button" aria-label="使用目前位置定位">📍 定位</button></div>
-        <datalist id="stList"></datalist><div class="hint" id="locHint" aria-live="polite"></div>
+    <section id="dashboardView" class="hidden">
+      <div class="section-label">本次路線預估需求</div>
+      <div class="battery-grid">
+        <div class="battery"><div class="type">2.0 電池</div><div class="count" id="battery20Count">6</div><div class="unit" id="battery20Unit">顆 · 6 輛待處理</div></div>
+        <div class="battery"><div class="type">2.0E 電池</div><div class="count" id="battery20eCount">4</div><div class="unit" id="battery20eUnit">顆 · 4 輛待處理</div></div>
       </div>
-      <div class="fld"><label for="budgetSel">未來可派時段(行車時間預算)</label>
-        <select id="budgetSel">
-          <option value="30">30 分鐘</option><option value="60" selected>60 分鐘</option>
-          <option value="90">90 分鐘</option><option value="120">120 分鐘</option>
-          <option value="180">180 分鐘(半天)</option><option value="240">240 分鐘(整班)</option>
-        </select>
-        <div class="hint">目標:此時段內以最短行車串出<b>最多可維修工量</b>。僅計行車、不含作業時間。</div>
-      </div>
-      <button class="go-btn" id="goBtn" type="button" aria-describedby="formErr">規 劃 派 工 路 徑</button>
-      <div class="err" id="formErr" role="alert" aria-live="assertive"></div>
-    </div>
-  </section>
 
-  <!-- 任務 -->
-  <section id="scrTask" class="hide">
-    <div id="feedBox"></div>
-    <div class="chiprow" id="chips"></div>
-    <div class="stepline" id="stepline"></div>
-    <div id="map" aria-label="派工路線地圖"></div>
-    <div id="taskBox"></div>
-    <div id="leftBox"></div>
-    <div class="act-row" id="actRow">
-      <button class="btn ghost" id="backBtn" type="button">↩ 返回</button>
-      <button class="btn done" id="doneBtn" type="button">✔ 完成本站維修</button>
-    </div>
-    <div class="mini" id="miniInfo"></div>
-  </section>
-  <div class="sync-toast" id="syncToast" role="status" aria-live="polite"></div>
+      <div class="dashboard-grid" style="margin-top:14px">
+        <div class="card profile">
+          <div class="avatar" id="avatar">A1</div>
+          <div><h2 id="profileName">A12345</h2><p id="profileMeta">G1 中和區 · KEA-1234</p></div>
+          <div class="shift" id="profileShift">早班</div>
+          <div class="stats" style="grid-column:1/-1">
+            <div class="stat"><b id="routeStationCount">4 站</b><span>本次路線</span></div>
+            <div class="stat"><b id="routeVehicleCount">10 輛</b><span>低電量車</span></div>
+            <div class="stat"><b>46 分</b><span>預估時間</span></div>
+          </div>
+        </div>
+
+        <div class="card feed">
+          <div class="feed-head"><span>同區動態｜G1 中和區</span><span>3 人在線</span></div>
+          <div class="feed-row"><div class="feed-num">陳</div><div class="feed-main"><b>陳柏宇 · 維修中</b><span>秀山國小 · 1 台</span></div><div class="feed-distance">1.2 km</div></div>
+          <div class="feed-row"><div class="feed-num">林</div><div class="feed-main"><b>林冠廷 · 前往中</b><span>新生街 112 巷口 · 2 台</span></div><div class="feed-distance">2.0 km</div></div>
+          <div class="feed-row"><div class="feed-num">我</div><div class="feed-main"><b>目前路線 · 待出發</b><span>捷運中和站 → 漳和國中</span></div><div class="feed-distance">0.0 km</div></div>
+        </div>
+      </div>
+
+      <div class="card map-card">
+        <div class="map-title"><b>距離優先派工路線</b><span>近 → 遠 · 共 4 站</span></div>
+        <div id="map"></div>
+        <div class="route-summary">捷運中和站 → 漳和國中 → 枋寮公園 → 秀山國小 → 錦和運動公園</div>
+      </div>
+
+      <div class="work-title"><h2>接下來的工單</h2><span id="dedupeStatus">正在比對完成紀錄…</span></div>
+      <div id="tasks"></div>
+    </section>
+  </main>
 </div>
-
+<div class="demo-nav" aria-label="預覽畫面切換">
+  <button id="showLogin">登入頁</button><button id="showDashboard" class="active">派工頁</button>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-/* ═══ 區域對照(可調) ═══ */
-const ZONE_INFO={G1:['中和區','和平'],G2:['永和區','和平'],K1:['板橋區','和平'],K2:['土城區','和平'],
-B0:['台大校內外','新店'],B1:['大安區','新店'],B2:['文山區','新店'],J:['新店分區（坪林、石碇、深坑、烏來、新店）','新店'],
-C1:['大同區','蘆洲'],D1:['萬華區','蘆洲'],D2:['中正區','蘆洲'],H:['蘆洲區(五股)','蘆洲'],H1:['三重區','蘆洲'],H2:['林口分區（林口、八里）','蘆洲'],
-E1:['士林區','洲美'],E2:['北投區','洲美'],L:['淡水分區（石門、三芝、淡水）','洲美'],
-A2:['南港區','汐止'],F:['七星分區（金山、萬里、汐止）','汐止'],N:['瑞芳分區（瑞芳、平溪、雙溪、貢寮）','汐止'],
-C2:['中山區','瑞光'],A3:['內湖區','瑞光'],A1:['信義區','瑞光'],C3:['松山區','瑞光'],
-I:['新莊區','新莊'],M:['樹三鶯區(樹林、三峽、鶯歌)','新莊']};
-const ZONE_ORDER=['G1','G2','K1','K2','B0','B1','B2','J','C1','D1','D2','E1','E2','L','A2','F','N','C2','A3','A1','C3','H','H1','H2','I','M'];
-const DEPOT_BIG={洲美:'北',汐止:'北',瑞光:'東',蘆洲:'西',新莊:'西',新店:'南',和平:'南'};
-const BIG_ORDER=['北','東','南','西'];
-const BIG_LABEL={北:'北區',東:'東區',南:'南區',西:'西區'};
-const BIG_DESC={北:'士林 北投 淡水 南港 汐止 瑞芳',東:'中山 松山 內湖 信義',南:'台大 大安 文山 新店 中永和 板橋 土城',西:'三重 蘆洲 大同 萬華 中正 林口 新莊 樹三鶯'};
-
-/* ═══ 內建預設工單(監控可上傳覆蓋) ═══ */
-const DEFAULT_WO=[];
-
-/* ★★ Google 試算表與跨裝置串接設定 ★★
-   Code.gs 已指定下方試算表；部署為網頁應用程式後，可直接在監控區貼上 /exec 網址。
-   本版已預設填入正式 /exec 網址並自動測試；使用者仍可在監控區改成其他部署網址。 */
-const TARGET_SHEET_ID='1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo';
-const TARGET_SHEET_URL='https://docs.google.com/spreadsheets/d/1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo/edit?gid=0#gid=0';
-const LS_SYNC_URL='maint_sheet_sync_url_v2';
-const DEFAULT_SYNC_URL='https://script.google.com/macros/s/AKfycbydwoiMGGsP3XQJBhs6BxRiwWF8bBoIfCZ6GjJH7HIUkQLmRlqCyfGvWycsYed7VAUb/exec';
-let SYNC_URL=DEFAULT_SYNC_URL;
-try{SYNC_URL=(localStorage.getItem(LS_SYNC_URL)||DEFAULT_SYNC_URL).trim();}catch(e){SYNC_URL=DEFAULT_SYNC_URL;}
-
-const $=id=>document.getElementById(id);
-const LS_WO='maint_wo_v1';
-const LS_LOG_QUEUE='maint_sheet_log_queue_v1';
-
-/* ═══ geo / 速度 ═══ */
-function hav(a,b){if(!a||!b||a.la==null||b.la==null)return 0;const R=6371,r=Math.PI/180,
-  dL=(b.la-a.la)*r,dN=(b.lo-a.lo)*r,x=Math.sin(dL/2)**2+Math.cos(a.la*r)*Math.cos(b.la*r)*Math.sin(dN/2)**2;
-  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
-function spdAt(h){if((h>=7&&h<=9)||(h>=17&&h<=19))return 10;if(h>=20)return 20;return 15;}
-function osrmFactor(s){return s<=10?2.0:(s<=15?1.2:1.0);}
-const TOR=1.3,DRIVE_BUF=1,BUDGET_DEF=60;
-
-/* ═══ OSRM 路徑矩陣(照 DISPATCH) ═══ */
-const ROUTE_BASE='https://router.project-osrm.org';
-const ROUTE_TTL=6*3600*1000,ROUTE_MAX=80;
-let ROUTE={sig:'',map:{},fetchedAt:0,source:'距離估算'};
-function locKey(p){return p&&p.la!=null?(Number(p.lo).toFixed(5)+','+Number(p.la).toFixed(5)):'';}
-function pairKey(a,b){return locKey(a)+'=>'+locKey(b);}
-function routeMetric(a,b){if(!a||!b)return null;if(locKey(a)===locKey(b))return{km:0,min:0};return ROUTE.map[pairKey(a,b)]||null;}
-function drv(a,b,s){const m=routeMetric(a,b);if(m)return m.min<=0.05?0:m.min*osrmFactor(s);
-  const km=hav(a,b);if(km<=0.001)return 0;return km*TOR/s*60+DRIVE_BUF;}
-async function loadRouteMatrix(startRec,nodes){
-  let pts=[startRec,...nodes].filter(p=>p&&p.la!=null);
-  const seen=new Set();pts=pts.filter(p=>{const k=locKey(p);if(!k||seen.has(k))return false;seen.add(k);return true;});
-  if(pts.length>ROUTE_MAX){const ref=startRec||pts[0];pts=pts.sort((a,b)=>hav(ref,a)-hav(ref,b)).slice(0,ROUTE_MAX);}
-  const sig=pts.map(locKey).join('|');
-  if(ROUTE.sig===sig&&Date.now()-ROUTE.fetchedAt<ROUTE_TTL)return ROUTE;
-  if(pts.length<2){ROUTE={sig,map:{},fetchedAt:Date.now(),source:'距離估算'};return ROUTE;}
-  try{
-    const coords=pts.map(p=>Number(p.lo).toFixed(6)+','+Number(p.la).toFixed(6)).join(';');
-    const r=await fetch(ROUTE_BASE+'/table/v1/driving/'+coords+'?annotations=duration,distance');
-    const js=await r.json();if(js.code!=='Ok'||!Array.isArray(js.durations))throw 0;
-    const map={};for(let i=0;i<pts.length;i++)for(let j=0;j<pts.length;j++){if(i===j)continue;
-      const d=js.durations[i]&&js.durations[i][j],km=js.distances&&js.distances[i]&&js.distances[i][j];
-      if(d==null||km==null)continue;map[pairKey(pts[i],pts[j])]={km:Math.max(0,km/1000),min:Math.max(0,d/60)};}
-    ROUTE={sig,map,fetchedAt:Date.now(),source:'OSRM道路時間'};
-  }catch(e){ROUTE={sig,map:ROUTE.map||{},fetchedAt:Date.now(),source:'距離估算'};}
-  return ROUTE;
-}
-
-/* ═══ 工單資料層(GAS ?wo / 內建 / localStorage) ═══ */
-let WO=[];
-function classify(zc){const zi=ZONE_INFO[zc];if(!zi)return{area:'未分類',depot:'其他',big:'其他'};return{area:zi[0],depot:zi[1],big:DEPOT_BIG[zi[1]]||'其他'};}
-function zoneLabel(zone){const zi=ZONE_INFO[zone];return zi?`${zone}｜${zi[0]}`:zone;}
-async function loadWorkorders(){
-  if(SYNC_URL){try{const a=await fetchJsonWithTimeout(makeSyncUrl({wo:1,t:Date.now()}),{},15000);
-    if(Array.isArray(a)&&a.length){WO=a;return 'gas';}}catch(e){}}
-  try{const s=localStorage.getItem(LS_WO);if(s){WO=JSON.parse(s);return 'local';}}catch(e){}
-  WO=DEFAULT_WO;return 'default';
-}
-async function pushWorkorders(items){
-  if(SYNC_URL){try{await postToSync({op:'setWO',items});}catch(e){showSyncToast('工單已存本機，但雲端推送失敗。','warn',6000);}}
-  try{localStorage.setItem(LS_WO,JSON.stringify(items));}catch(e){}
-  WO=items;
-}
-
-/* ═══ Google 試算表完成紀錄：本機排隊、失敗重送、後端去重 ═══ */
-let toastTimer=null;
-function showSyncToast(message,type='ok',ms=4200){const el=$('syncToast');if(!el)return;
-  el.textContent=message;el.className='sync-toast show '+type;
-  if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>{el.className='sync-toast';},ms);}
-function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
-function normalizeSyncUrl(value){const s=String(value||'').trim().replace(/\s+/g,'');
-  return /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec(?:\?.*)?$/i.test(s)?s:'';}
-function makeSyncUrl(params={}){if(!SYNC_URL)throw new Error('尚未設定 Apps Script 網址');const u=new URL(SYNC_URL);
-  Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,String(v)));return u.toString();}
-function setSyncStatus(message,type=''){const el=$('syncStatus');if(!el)return;el.textContent=message;el.className='sheet-sync-status'+(type?' '+type:'');}
-function initSheetSyncPanel(){const input=$('syncUrlInput'),link=$('sheetLink'),save=$('syncSaveBtn'),clear=$('syncClearBtn');
-  if(link)link.href=TARGET_SHEET_URL;if(input)input.value=SYNC_URL;
-  if(!SYNC_URL)setSyncStatus('尚未連線；完成紀錄會先暫存在本機。','warn');
-  save.onclick=async()=>{const normalized=normalizeSyncUrl(input.value);if(!normalized){setSyncStatus('網址格式不正確，必須是 Apps Script 的 /exec 網址。','err');return;}
-    SYNC_URL=normalized;try{localStorage.setItem(LS_SYNC_URL,SYNC_URL);}catch(e){}input.value=SYNC_URL;save.disabled=true;setSyncStatus('測試連線中…');
-    try{const ok=await checkSheetConnection(true);if(ok)await flushCompletionLogs(false);}finally{save.disabled=false;}};
-  clear.onclick=async()=>{SYNC_URL=DEFAULT_SYNC_URL;try{localStorage.removeItem(LS_SYNC_URL);}catch(e){}input.value=SYNC_URL;setSyncStatus('已恢復預設網址，測試連線中…');await checkSheetConnection(true);};
-  input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();save.click();}};}
-function readLogQueue(){try{const raw=localStorage.getItem(LS_LOG_QUEUE);const a=raw?JSON.parse(raw):[];return Array.isArray(a)?a:[];}catch(e){return[];}}
-function saveLogQueue(items){try{localStorage.setItem(LS_LOG_QUEUE,JSON.stringify(items.slice(-100)));}catch(e){}}
-function enqueueCompletion(rec){let q=readLogQueue().filter(x=>x&&x.id!==rec.id);
-  q.push({id:rec.id,zone:rec.zone||APP.zone,rec,context:{page:location.href},queuedAt:Date.now(),tries:0});saveLogQueue(q);return q.length;}
-async function fetchJsonWithTimeout(url,options={},timeoutMs=15000){const ctrl=typeof AbortController!=='undefined'?new AbortController():null;
-  const timer=ctrl?setTimeout(()=>ctrl.abort(),timeoutMs):null;
-  try{const r=await fetch(url,{cache:'no-store',redirect:'follow',...options,...(ctrl?{signal:ctrl.signal}:{})});const text=await r.text();let data=null;
-    try{data=text?JSON.parse(text):null;}catch(e){throw new Error('雲端回應格式錯誤');}
-    if(!r.ok||data&&data.ok===false)throw new Error(data&&data.error?data.error:`HTTP ${r.status}`);return data;
-  }finally{if(timer)clearTimeout(timer);}}
-async function postToSync(payload,timeoutMs=15000){if(!SYNC_URL)throw new Error('尚未設定 Apps Script 網址');
-  const ctrl=typeof AbortController!=='undefined'?new AbortController():null;
-  const timer=ctrl?setTimeout(()=>ctrl.abort(),timeoutMs):null;
-  try{await fetch(SYNC_URL,{method:'POST',mode:'no-cors',redirect:'follow',body:JSON.stringify(payload),...(ctrl?{signal:ctrl.signal}:{})});}
-  finally{if(timer)clearTimeout(timer);}}
-async function sendCompletionItem(item){await postToSync({op:'logCompletion',zone:item.zone,rec:item.rec,context:item.context});
-  const bikes=Array.isArray(item.rec&&item.rec.bikes)?item.rec.bikes.map(x=>String(x==null?'':x).trim()):[];
-  const expected=Math.max(1,new Set(bikes.length?bikes:['']).size);
-  for(let n=0;n<4;n++){await sleep(600+n*450);const verify=await fetchJsonWithTimeout(makeSyncUrl({hasLog:item.id,t:Date.now()}),{},10000);
-    if(verify&&Number(verify.logged||0)>=expected)return{logged:Number(verify.logged||0)};}
-  throw new Error('後端尚未確認完成紀錄');}
-async function flushCompletionLogs(showResult=false){let queue=readLogQueue();if(!queue.length)return{sent:0,pending:0,rows:0};
-  if(!SYNC_URL){if(showResult)showSyncToast('已完成；Google 試算表尚未連線，紀錄已暫存在本機。','warn',6000);return{sent:0,pending:queue.length,rows:0};}
-  let sent=0,rows=0,remaining=[];
-  for(let i=0;i<queue.length;i++){const item=queue[i];try{const result=await sendCompletionItem(item);sent++;rows+=Number(result&&result.logged||0);
-    }catch(err){item.tries=Number(item.tries||0)+1;item.lastError=String(err&&err.message||err);remaining=[item,...queue.slice(i+1)];break;}}
-  saveLogQueue(remaining);
-  if(showResult){if(remaining.length)showSyncToast('已完成；Google 試算表暫時寫入失敗，已排隊稍後重送。','warn',6500);
-    else showSyncToast(`已寫入 Google 試算表${rows?`（確認 ${rows} 筆）`:''}。`,'ok');}
-  return{sent,pending:remaining.length,rows};}
-async function recordCompletion(rec){enqueueCompletion(rec);return flushCompletionLogs(true);}
-async function checkSheetConnection(showToast=false){if(!SYNC_URL){setSyncStatus('尚未連線；完成紀錄會先暫存在本機。','warn');return false;}
-  setSyncStatus('測試連線中…');
-  try{const r=await fetchJsonWithTimeout(makeSyncUrl({health:1,t:Date.now()}),{},12000);
-    if(!r||!r.ok)throw new Error('Apps Script 未回傳正常狀態');
-    if(r.spreadsheetId&&r.spreadsheetId!==TARGET_SHEET_ID)throw new Error('這個 Apps Script 連到另一份試算表');
-    setSyncStatus(`已連線：${r.sheetName||'Google 試算表'}／${r.completionSheet||'維修完成紀錄'}`,'ok');
-    if(showToast)showSyncToast('Google 試算表連線成功。','ok');return true;
-  }catch(e){setSyncStatus('連線失敗：'+String(e&&e.message||e),'err');if(showToast)showSyncToast('Google 試算表連線失敗。','err',6000);return false;}}
-
-
-/* ═══ 同區動態層(GAS Store,照 DISPATCH) ═══ */
-const MEM={};let BC=null;try{BC=new BroadcastChannel('yb-maint')}catch(e){}
-const Store={
-  get mode(){return SYNC_URL?'gas':'local';},
-  async load(zone){
-    if(this.mode==='gas'){try{const a=await fetchJsonWithTimeout(makeSyncUrl({zone,t:Date.now()}),{},15000);return Array.isArray(a)?a:[];}catch(e){return APP.acts||[];}}
-    const key='mact:'+zone;try{const v=localStorage.getItem(key);return v?JSON.parse(v):(MEM[key]||[]);}catch(e){return MEM[key]||[];}
-  },
-  async upsert(zone,rec){
-    if(this.mode==='gas'){try{await postToSync({op:'upsert',zone,rec});}catch(e){}return this.load(zone);}
-    let a=await this.load(zone);const i=a.findIndex(x=>x.id===rec.id);if(i>=0)a[i]=rec;else a.push(rec);return this._save(zone,a);
-  },
-  async remove(zone,id){
-    if(this.mode==='gas'){try{await postToSync({op:'remove',zone,id});}catch(e){}return this.load(zone);}
-    let a=await this.load(zone);a=a.filter(x=>x.id!==id);return this._save(zone,a);
-  },
-  async _save(zone,a){const key='mact:'+zone;const cut=Date.now()-12*3600*1000;a=a.filter(x=>(x.doneTs||x.ts)>=cut).slice(-200);
-    try{localStorage.setItem(key,JSON.stringify(a));if(BC)BC.postMessage(zone);}catch(e){MEM[key]=a;}return a;}
-};
-async function upsertAct(rec){APP.acts=await Store.upsert(APP.zone,rec);}
-async function removeAct(id){APP.acts=await Store.remove(APP.zone,id);}
-
-/* ═══ 排除別人已認領/完成的車(避免撞單) ═══ */
-function claimedBikes(acts){const s=new Set();for(const a of acts||[]){(a.bikes||[]).forEach(b=>s.add(b));}return s;}
-const claimSig=acts=>[...claimedBikes((acts||[]).filter(a=>a.emp!==APP.emp))].sort().join(',');
-
-/* ═══ APP 狀態 ═══ */
-const APP={pos:null,posLabel:'',emp:'',truck:'',zone:'',t:0,sol:null,idx:0,cum:0,budget:BUDGET_DEF,acts:[],myActs:[],claimSig:'',rtSig:''};
-
-/* ═══ 站點聚合 + 採集式路徑(orienteering) ═══ */
-function clusterStations(zone,claimed){
-  const m=new Map();
-  WO.forEach(x=>{if(x.zc!==zone||x.la==null)return;if(claimed&&claimed.has(x.bike))return;
-    const k=x.code||x.st;if(!m.has(k))m.set(k,{code:x.code,st:x.st,la:x.la,lo:x.lo,items:[]});m.get(k).items.push(x);});
-  return [...m.values()].map(n=>{n.q=n.items.length;
-    n.prio=n.items.reduce((s,it)=>s+(/優先|60天以上|維修通報|客服/.test((it.why||'')+(it.src||''))?1:0),0);return n;});
-}
-function planRoute(start,nodes,budget,spd){
-  const D=(a,b)=>drv(a,b,spd);
-  let beam=[{seq:[],last:start,used:0,q:0,prio:0,vis:new Set()}];
-  const W=12,C=16;let improved=true,guard=0;
-  while(improved&&guard++<80){improved=false;const next=[];
-    beam.forEach(s=>{const cand=[];
-      nodes.forEach((n,i)=>{if(s.vis.has(i))return;const t=D(s.last,n);if(s.used+t>budget)return;cand.push({i,n,t,ratio:(n.q+n.prio*0.3)/(t+1)});});
-      cand.sort((a,b)=>b.ratio-a.ratio);
-      cand.slice(0,C).forEach(c=>{const v=new Set(s.vis);v.add(c.i);
-        next.push({seq:s.seq.concat(c.i),last:c.n,used:s.used+c.t,q:s.q+c.n.q,prio:s.prio+c.n.prio,vis:v});improved=true;});
-      next.push(s);});
-    const sig=s=>[...s.vis].sort((a,b)=>a-b).join(',');const best=new Map();
-    next.forEach(s=>{const k=sig(s);const o=best.get(k);if(!o||s.q>o.q||(s.q===o.q&&s.used<o.used))best.set(k,s);});
-    beam=[...best.values()].sort((a,b)=>b.q-a.q||b.prio-a.prio||a.used-b.used).slice(0,W);}
-  const win=beam.sort((a,b)=>b.q-a.q||b.prio-a.prio||a.used-b.used)[0];
-  // 組 schedule + legs
-  let prev=start,legs=[],acc=0;const stops=win.seq.map(i=>nodes[i]);
-  stops.forEach(n=>{const mn=D(prev,n),km=(routeMetric(prev,n)||{km:hav(prev,n)*TOR}).km;acc+=mn;legs.push({min:mn,km,acc,from:prev.st||prev.name||'目前位置'});prev=n;});
-  return {stops,legs,totalQ:win.q,totalMin:acc,totalStops:stops.length};
-}
-
-/* ═══ 動態記錄 ═══ */
-function newTaskAct(node){return{id:APP.emp+'-'+Date.now()+'-'+Math.floor(Math.random()*1e4),
-  emp:APP.emp,truck:APP.truck,zone:APP.zone,kind:'task',reportMode:'本站完成',st:node.st,code:node.code,q:node.q,
-  bikes:node.items.map(it=>it.bike),reasons:node.items.map(it=>({b:it.bike,w:it.why,d:it.dock,s:it.src})),
-  la:node.la,lo:node.lo,travelMin:null,travelKm:null,budget:APP.budget,from:'',status:'進行中',ts:Date.now(),doneTs:null};}
-
-/* ═══ 同區動態面板 ═══ */
-function tHM(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
-function renderFeed(){
-  const box=$('feedBox');if(!APP.zone){box.innerHTML='';return;}
-  const ORD={'進行中':0,'未執行':1,'已完成':2};
-  const list=(APP.acts||[]).slice().sort((a,b)=>(ORD[a.status]??9)-(ORD[b.status]??9)||(b.doneTs||b.ts)-(a.doneTs||a.ts)).slice(0,12);
-  const items=list.map(a=>{const sc=a.status==='進行中'?'run':a.status==='已完成'?'done':'todo';
-    const me=a.emp===APP.emp?'<span class="fme">我</span>':'';
-    const route=`<div class="froute">${a.st} · ${a.q} 台</div>`;
-    return`<li><div class="frow"><span class="fst ${sc}">${a.status}</span><span class="fkind">維修</span>`+
-      `<span>${a.emp}${a.truck?'/'+a.truck:''}${me}</span><span class="ftime">${tHM(a.doneTs||a.ts)}</span></div>${route}</li>`;}).join('');
-  const stale=APP.sol&&claimSig(APP.acts)!==APP.claimSig;
-  const note=stale?'⚠️ 有新動態,建議重算':'';
-  box.innerHTML=`<div class="feed"><div class="feed-h"><span>同區動態 ${zoneLabel(APP.zone)}</span>`+
-    `<span class="note">${note}</span><a id="rptBtn">＋回報單台完成</a></div>`+
-    `<div class="rpt hide" id="rptForm"><div class="row">`+
-    `<input class="r-st" id="rptBike" placeholder="車號" autocomplete="off"><input class="r-st" id="rptStn" list="stList" placeholder="場站" autocomplete="off"></div>`+
-    `<button class="r-send" id="rptSend" type="button">回報此車已完成維修</button></div>`+
-    (items?`<ul>${items}</ul>`:'<div class="fempty">目前無維修動態</div>')+`</div>`;
-  $('rptBtn').onclick=()=>$('rptForm').classList.toggle('hide');
-  $('rptSend').onclick=async()=>{const bike=$('rptBike').value.trim(),st=$('rptStn').value.trim(),btn=$('rptSend');if(!bike)return;
-    const hit=WO.find(x=>String(x.bike)===bike)||WO.find(x=>st&&x.st===st),now=Date.now();
-    const rec={id:APP.emp+'-r'+now,emp:APP.emp,truck:APP.truck,zone:APP.zone,kind:'manual',reportMode:'單台回報',
-      st:st||(hit&&hit.st)||'單台回報',code:(hit&&hit.code)||'',q:1,bikes:[bike],
-      reasons:[{b:bike,w:(hit&&hit.why)||'',d:(hit&&hit.dock)||'',s:(hit&&hit.src)||'單台回報'}],
-      la:hit&&hit.la!=null?hit.la:APP.pos&&APP.pos.la,lo:hit&&hit.lo!=null?hit.lo:APP.pos&&APP.pos.lo,
-      travelMin:0,travelKm:0,budget:APP.budget,from:APP.posLabel||'',status:'已完成',ts:now,doneTs:now};
-    btn.disabled=true;btn.textContent='回報中…';
-    try{await upsertAct(rec);await recordCompletion(rec);renderFeed();}
-    finally{if(document.body.contains(btn)){btn.disabled=false;btn.textContent='回報此車已完成維修';}}};
-}
-
-/* ═══ 四大區統計 ═══ */
-function bigCount(){const c={北:0,東:0,南:0,西:0,其他:0};WO.forEach(x=>{c[x.big]=(c[x.big]||0)+1;});return c;}
-function renderZoneSummary(){const c=bigCount();const box=$('zsum');box.innerHTML='';
-  BIG_ORDER.forEach(b=>{const d=document.createElement('div');d.className='zbox '+b;
-    d.innerHTML=`<div class="zn">${BIG_LABEL[b]}</div><div class="zc">${c[b]||0}</div><div class="zl">台</div>`;box.appendChild(d);});}
-
-/* ═══ 表單 ═══ */
-let clockTimer=null;
-function initForm(){
-  const sel=$('zoneSel'),prev=sel.value,counts={};
-  WO.forEach(x=>{if(x.zc)counts[x.zc]=(counts[x.zc]||0)+1;});
-  sel.innerHTML='<option value="">— 請選責任分區 —</option>';
-  ZONE_ORDER.forEach(zone=>{const o=document.createElement('option');o.value=zone;o.textContent=`${zoneLabel(zone)}（${counts[zone]||0} 台）`;sel.appendChild(o);});
-  if(prev&&ZONE_ORDER.includes(prev))sel.value=prev;
-  buildStList(sel.value);
-  sel.onchange=()=>buildStList(sel.value);
-  $('budgetSel').onchange=async()=>{APP.budget=+$('budgetSel').value||BUDGET_DEF;if(APP.sol&&!$('scrTask').classList.contains('hide'))await reSolve();};
-  $('clock').textContent=clockTxt();
-  if(!clockTimer)clockTimer=setInterval(()=>$('clock').textContent=clockTxt(),1000);
-}
-function clockTxt(){const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
-function buildStList(zone){const dl=$('stList');dl.innerHTML='';const seen=new Set();
-  WO.forEach(x=>{if(zone&&x.zc!==zone)return;if(x.st&&!seen.has(x.st)){seen.add(x.st);const o=document.createElement('option');o.value=x.st;o.textContent=x.area||'';dl.appendChild(o);}});}
-function nearestStation(la,lo){let best=null,bd=1e9;WO.forEach(x=>{if(x.la!=null){const d=hav({la,lo},{la:x.la,lo:x.lo});if(d<bd){bd=d;best=x;}}});return{st:best,km:bd};}
-$('gpsBtn').onclick=()=>{const h=$('locHint');if(!navigator.geolocation){h.textContent='此裝置不支援定位';return;}h.textContent='定位中…';
-  navigator.geolocation.getCurrentPosition(p=>{const la=+p.coords.latitude.toFixed(5),lo=+p.coords.longitude.toFixed(5);
-    APP.pos={st:'目前位置(GPS)',la,lo};APP.posLabel='目前位置';$('locInput').value=la+','+lo;
-    const nr=nearestStation(la,lo);
-    h.innerHTML=nr.st?`✅ 已定位。最近站:<b>${nr.st.st}</b>(${zoneLabel(nr.st.zc)},約${(nr.km*1000|0)}m)<span class="apply" data-z="${nr.st.zc}">套用此責任分區</span>`:'✅ 已定位';
-    const ap=h.querySelector('.apply');if(ap)ap.onclick=e=>{$('zoneSel').value=e.target.dataset.z;buildStList(e.target.dataset.z);};
-  },e=>{h.textContent='⚠️ 定位失敗,請手動輸入站名或座標';},{enableHighAccuracy:true,timeout:10000});};
-$('locInput').addEventListener('input',()=>{APP.pos=null;$('locHint').textContent='';});
-function resolveLoc(){const v=$('locInput').value.trim();if(APP.pos)return APP.pos;if(!v)return null;
-  if(v.includes(',')){const p=v.split(',');const a=parseFloat(p[0]),b=parseFloat(p[1]);if(!isNaN(a)&&!isNaN(b))return{st:'目前座標',la:a,lo:b};}
-  const z=$('zoneSel').value;let hit=WO.find(x=>x.st===v&&x.la!=null)||WO.find(x=>x.st&&x.st.includes(v)&&x.la!=null);
-  return hit?{st:hit.st,la:hit.la,lo:hit.lo}:null;}
-
-/* ═══ 派發流程(照 DISPATCH) ═══ */
-$('goBtn').onclick=async()=>{
-  const err=$('formErr');err.textContent='';
-  const emp=$('empId').value.trim(),zone=$('zoneSel').value,truck=$('truckId').value.trim();
-  if(!emp){err.textContent='請輸入員工編號';return;}
-  if(!zone){err.textContent='請選責任分區';return;}
-  if(!truck){err.textContent='請輸入車號';return;}
-  const pos=resolveLoc();if(!pos){err.textContent='目前地點無法辨識,請輸入站名/座標或按定位';return;}
-  let t=new Date().getHours();if(t<6)t=6;if(t>23)t=23;
-  APP.emp=emp;APP.truck=truck;APP.zone=zone;APP.pos=pos;APP.posLabel=pos.st||'目前位置';APP.t=t;APP.budget=+$('budgetSel').value||BUDGET_DEF;
-  const spd=spdAt(t);
-  $('goBtn').textContent='讀取工單資料…';await loadWorkorders();
-  $('goBtn').disabled=true;
-  APP.acts=await Store.load(zone);
-  for(const a of APP.acts.filter(a=>a.emp===emp&&a.status!=='已完成'))await removeAct(a.id);
-  const claimed=claimedBikes(APP.acts);
-  let nodes=clusterStations(zone,claimed);
-  if(!nodes.length){$('goBtn').textContent='規 劃 派 工 路 徑';$('goBtn').disabled=false;err.textContent=`${BIG_LABEL[zone]}目前無可規劃工單`;return;}
-  $('goBtn').textContent='計算道路行車時間…';await loadRouteMatrix(pos,nodes);
-  APP.sol=planRoute(pos,nodes,APP.budget,spd);
-  APP.claimSig=claimSig(APP.acts);
-  APP.idx=0;APP.cum=0;
-  await claimSchedule();
-  $('goBtn').textContent='規 劃 派 工 路 徑';$('goBtn').disabled=false;
-  $('scrForm').classList.add('hide');$('scrTask').classList.remove('hide');
-  renderChips();renderFeed();renderTask();drawMap();window.scrollTo(0,0);
-};
-
-/* 整條路線登記:當前站=進行中,其餘=未執行 */
-async function claimSchedule(){APP.myActs=[];if(!APP.sol)return;
-  for(let i=0;i<APP.sol.stops.length;i++){const rec=newTaskAct(APP.sol.stops[i]),leg=APP.sol.legs[i]||{};
-    rec.travelMin=Number.isFinite(leg.min)?leg.min:null;rec.travelKm=Number.isFinite(leg.km)?leg.km:null;rec.from=leg.from||APP.posLabel||'';
-    rec.status=(i===APP.idx)?'進行中':'未執行';APP.myActs[i]=rec;await upsertAct(rec);}}
-async function releaseMine(){for(const rec of APP.myActs){if(rec&&rec.status!=='已完成')await removeAct(rec.id);}APP.myActs=[];}
-
-function renderChips(){const s=APP.sol;const per=spdAt(APP.t)<=10?'尖峰':spdAt(APP.t)<=15?'平峰':'夜間';
-  $('chips').innerHTML=`<div class="chip"><span>員</span>${APP.emp}</div><div class="chip"><span>車</span>${APP.truck}</div>`+
-    `<div class="chip"><span>區</span>${zoneLabel(APP.zone)}</div><div class="chip"><span>工量</span>${s.totalQ}台</div>`+
-    `<div class="chip"><span>路況</span>${per}</div>`;}
-
-/* ═══ 任務渲染(單站) ═══ */
-function renderTask(){
-  const sol=APP.sol,i=APP.idx,box=$('taskBox');
-  $('stepline').innerHTML=sol.stops.length?`維修站 <b>${Math.min(i+1,sol.stops.length)}</b> / ${sol.stops.length} ・ ${APP.budget} 分鐘時段規劃 ・ ${ROUTE.source}`:'';
-  if(!sol.stops.length){box.innerHTML=`<div class="empty">🎉 ${zoneLabel(APP.zone)} 此時段內無可安排工量</div>`;$('doneBtn').classList.add('hide');$('miniInfo').innerHTML='';return;}
-  if(i>=sol.stops.length){renderFinish();return;}
-  $('doneBtn').classList.remove('hide');
-  const n=sol.stops[i],leg=sol.legs[i];
-  let bikes='';n.items.forEach(it=>{bikes+=`<div class="bike"><span class="bn">${it.bike}</span>`+
-    `<span class="bw">${it.why||'-'}</span>${it.dock?`<span class="bd">柱${it.dock}</span>`:''}<span class="bs ${it.src}">${it.src||''}</span></div>`;});
-  const cum=APP.cum+leg.min;const pct=Math.min(100,cum/APP.budget*100);const pgc=pct<60?'':pct<85?'warn':'over';
-  const gmap=`https://www.google.com/maps/dir/?api=1&destination=${n.la},${n.lo}&travelmode=driving`;
-  box.innerHTML=`<div class="task-card">
-    <div class="task-head"><div class="badge">維修</div>
-      <div class="task-title"><div class="tgt">${n.st}</div><div class="sub">${n.code||''} · 本站 ${n.q} 台待維修</div></div>
-      <div class="task-load"><div class="n">${n.q}</div><div class="u">台</div></div></div>
-    <div class="link-bar"><span>🚚 由 ${i===0?APP.posLabel:sol.stops[i-1].st} 前往 <b>${n.st}</b></span><span class="lk-time">${Math.ceil(leg.min)}分 · ${leg.km.toFixed(1)}km</span></div>
-    <div class="bikes">${bikes}</div>
-    <div class="nav-bar"><a class="nav-btn" href="${gmap}" target="_blank">▸ Google 導航到此站</a></div>
-    <div class="est-line">⏱ 到站累計行車 <b>${Math.ceil(cum)}</b> / ${APP.budget} 分</div>
-    <div class="pg-wrap"><div class="pg-track"><div class="pg-fill ${pgc}" style="width:${pct}%"></div></div><div class="pg-txt">${pct.toFixed(0)}%</div></div>
-  </div>`;
-  const leftQ=nodesLeftQ();const leftS=sol.stops.length-sol.stops.slice(0,i).length;
-  $('leftBox').innerHTML='';
-  $('miniInfo').innerHTML=`本班共 ${sol.stops.length} 站 / ${sol.totalQ} 台・<a id="reSolve">依現在位置時間重算</a>`;
-  $('reSolve').onclick=reSolve;
-}
-function nodesLeftQ(){return APP.sol.stops.slice(APP.idx+1).reduce((s,n)=>s+n.q,0);}
-
-function renderFinish(){const sol=APP.sol;
-  $('taskBox').innerHTML=`<div class="fin"><div class="big">✔ 班次完成</div>
-    <div class="lbl">本 ${APP.budget} 分鐘維修班次已全數完成</div>
-    <div class="fin-grid"><div class="cg"><div class="v">${sol.totalQ}</div><div class="l">維修工量(台)</div></div>
-      <div class="cg"><div class="v">${sol.stops.length}</div><div class="l">停靠站</div></div>
-      <div class="cg"><div class="v">${Math.round(sol.totalMin)}</div><div class="l">行車(分)</div></div></div>
-    <button class="btn done" id="nextShift" type="button" style="width:100%">🔄 依現在位置/時間派下一班</button></div>`;
-  $('doneBtn').classList.add('hide');$('miniInfo').innerHTML='';$('leftBox').innerHTML='';
-  $('nextShift').onclick=reSolve;
-}
-
-/* 完成本站 → 位置移到本站,下一站 */
-$('doneBtn').onclick=async()=>{const sol=APP.sol,i=APP.idx,n=sol.stops[i],btn=$('doneBtn');
-  btn.disabled=true;btn.textContent='寫入完成紀錄…';
-  try{if(n){APP.cum+=sol.legs[i].min;const cur=APP.myActs[i];if(cur){cur.status='已完成';cur.doneTs=Date.now();await upsertAct(cur);await recordCompletion(cur);}
-      APP.pos={st:n.st,la:n.la,lo:n.lo};APP.posLabel=n.st;}
-    APP.idx++;const nx=APP.myActs[APP.idx];if(nx){nx.status='進行中';await upsertAct(nx);}
-    renderFeed();renderTask();drawMap();window.scrollTo(0,0);
-  }finally{btn.disabled=false;btn.textContent='✔ 完成本站維修';}};
-
-/* 重算 */
-async function reSolve(){let t=new Date().getHours();if(t<6)t=6;if(t>23)t=23;APP.t=t;const spd=spdAt(t);
-  await releaseMine();await loadWorkorders();APP.acts=await Store.load(APP.zone);
-  const claimed=claimedBikes(APP.acts);let nodes=clusterStations(APP.zone,claimed);
-  await loadRouteMatrix(APP.pos,nodes);
-  APP.sol=planRoute(APP.pos,nodes,APP.budget,spd);APP.claimSig=claimSig(APP.acts);APP.idx=0;APP.cum=0;
-  await claimSchedule();renderChips();renderFeed();renderTask();drawMap();window.scrollTo(0,0);}
-
-$('backBtn').onclick=async()=>{await releaseMine();$('scrTask').classList.add('hide');$('scrForm').classList.remove('hide');};
-
-/* 30 秒同步同區動態 */
-setInterval(async()=>{if(!APP.zone||$('scrTask').classList.contains('hide'))return;if(document.hidden)return;
-  APP.acts=await Store.load(APP.zone);renderFeed();renderTask();},30000);
-setInterval(()=>{if(!document.hidden)flushCompletionLogs(false);},60000);
-if(BC)BC.onmessage=async e=>{if(e.data===APP.zone){APP.acts=await Store.load(APP.zone);renderFeed();renderTask();}};
-
-/* ═══ 地圖 ═══ */
-let mapObj=null;
-async function drawMap(){const sol=APP.sol,el=$('map');
-  if(mapObj){mapObj.remove();mapObj=null;}
-  if(!sol||!sol.stops.length){el.innerHTML='';el.classList.add('hide');return;}
-  el.classList.remove('hide');el.innerHTML='';
-  if(typeof L==='undefined'){
-    el.innerHTML='<div class="map-fallback">地圖元件暫時無法載入。任務清單與 Google 導航仍可正常使用。</div>';
-    return;
+  const SYNC_URL="https://script.google.com/macros/s/AKfycbydwoiMGGsP3XQJBhs6BxRiwWF8bBoIfCZ6GjJH7HIUkQLmRlqCyfGvWycsYed7VAUb/exec";
+  const COMPLETION_SHEET_URL="https://docs.google.com/spreadsheets/d/1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo/gviz/tq?headers=1&sheet=%E7%B6%AD%E4%BF%AE%E5%AE%8C%E6%88%90%E7%B4%80%E9%8C%84";
+  const routes=[
+    {id:"LOWBAT-500207003-117357-120683",station:"漳和國中",code:"500207003",km:"0.8 km",mins:"4 分",need:2,vehicles:[["117357","3% 2.0低電量禁用（優先）","2.0"],["120683","7% 2.0E低電量禁用（優先）","2.0E"]]},
+    {id:"LOWBAT-500204090-030522-021588-026017",station:"枋寮公園",code:"500204090",km:"1.6 km",mins:"6 分",need:3,vehicles:[["030522","6% 2.0低電量禁用（優先）","2.0"],["021588","8% 2.0低電量禁用（優先）","2.0"],["026017","7% 2.0E低電量禁用（優先）","2.0E"]]},
+    {id:"LOWBAT-500104055-020430-011209",station:"秀山國小",code:"500104055",km:"2.7 km",mins:"8 分",need:2,vehicles:[["020430","5% 2.0低電量禁用（優先）","2.0"],["011209","9% 2.0E低電量禁用（優先）","2.0E"]]},
+    {id:"LOWBAT-500113044-030309-016163-020138",station:"錦和運動公園",code:"500113044",km:"4.1 km",mins:"11 分",need:3,vehicles:[["030309","11% 2.0低電量禁用（優先）","2.0"],["016163","12% 2.0低電量禁用（優先）","2.0"],["020138","5% 2.0E低電量禁用（優先）","2.0E"]]}
+  ];
+  const DISPATCH_KEYWORD="低電量禁用";
+  const completionKey=(stationCode,vehicleId)=>`${String(stationCode||"").trim()}|${String(vehicleId||"").trim()}`;
+  function lowBatteryOnly(sourceRoutes){
+    return sourceRoutes.filter(route=>String(route.completedNote||"").trim()!=="已完成").map(route=>{
+      const vehicles=route.vehicles.filter(vehicle=>
+        String(vehicle[1]||"").includes(DISPATCH_KEYWORD) &&
+        String(vehicle[3]||"").trim()!=="已完成"
+      );
+      return {...route,vehicles,need:vehicles.length};
+    }).filter(route=>route.vehicles.length>0);
   }
-  const pts=[APP.pos,...sol.stops];
-  mapObj=L.map('map',{zoomControl:true});
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(mapObj);
-  L.circleMarker([APP.pos.la,APP.pos.lo],{radius:7,color:'#1c1a12',fillColor:'#f4ca00',fillOpacity:1}).addTo(mapObj).bindPopup('起點');
-  sol.stops.forEach((n,i)=>{const done=i<APP.idx;L.marker([n.la,n.lo]).addTo(mapObj).bindPopup(`${i+1}. ${n.st}(${n.q}台)${done?' ✔':''}`);});
-  try{const co=pts.slice(0,24).map(p=>p.lo+','+p.la).join(';');
-    const r=await fetch(ROUTE_BASE+'/route/v1/driving/'+co+'?overview=full&geometries=geojson');const j=await r.json();
-    if(j.code==='Ok')L.polyline(j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),{color:'#1c1a12',weight:4,opacity:.8}).addTo(mapObj);
-    else throw 0;
-  }catch(e){L.polyline(pts.map(p=>[p.la,p.lo]),{color:'#1c1a12',weight:3,dashArray:'6,6',opacity:.7}).addTo(mapObj);}
-  mapObj.fitBounds(L.latLngBounds(pts.map(p=>[p.la,p.lo])),{padding:[25,25]});setTimeout(()=>mapObj.invalidateSize(),200);}
-
-/* ═══ 監控上傳 ═══ */
-function toggleMonitor(){const card=$('monCard'),open=card.classList.toggle('open');$('monToggle').setAttribute('aria-expanded',String(open));}
-$('monToggle').onclick=toggleMonitor;
-$('monToggle').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleMonitor();}};
-$('upDrop').onclick=()=>$('fileIn').click();
-$('fileIn').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)parseXlsx(f);};
-function parseXlsx(file){const st=$('upStatus');st.className='up-status';
-  if(typeof XLSX==='undefined'){st.className='up-status err';st.textContent='✖ Excel 解析元件載入失敗,請確認網路後重試';return;}
-  st.textContent='讀取中…';
-  const rd=new FileReader();
-  rd.onload=async ev=>{try{
-    const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
-    const sn=wb.SheetNames.find(n=>n.includes('派工總表'));if(!sn)throw new Error('找不到「派工總表」工作表');
-    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});const out=[];
-    for(let i=3;i<rows.length;i++){const r=rows[i];const bike=(''+(r[2]||'')).trim();if(!bike)continue;
-      const lock=(''+(r[3]||'')).trim(),dock=(''+(r[4]||'')).trim(),why=(''+(r[5]||'')).trim(),src=(''+(r[6]||'')).trim(),co=(''+(r[7]||'')).trim(),zc=(''+(r[9]||'')).trim();
-      let la=null,lo=null;if(co.includes(',')){const p=co.split(',');const a=parseFloat(p[0]),b=parseFloat(p[1]);if(!isNaN(a)&&!isNaN(b)){la=a;lo=b;}}
-      const m=lock.match(/^(\d{9})(.*)$/);const code=m?m[1]:'',stn=m?m[2]:lock;const c=classify(zc);
-      out.push({bike,code,st:stn,dock,why,src,la,lo,zc,area:c.area,depot:c.depot,big:c.big});}
-    if(!out.length)throw new Error('未讀到工單(確認為 2.0派工總表 格式)');
-    await pushWorkorders(out);
-    st.className='up-status ok';const wc=out.filter(x=>x.la!=null).length;
-    st.textContent=`✔ 已載入 ${out.length} 筆(${wc} 筆有座標)${SYNC_URL?',已推送全區':',已存本機'}。`;
-    renderZoneSummary();initForm();$('srcNote').textContent='資料來源:本次上傳';
-  }catch(err){st.className='up-status err';st.textContent='✖ '+err.message;}};
-  rd.readAsArrayBuffer(file);}
-
-/* ═══ 初始化 ═══ */
-(async()=>{initSheetSyncPanel();const src=await loadWorkorders();renderZoneSummary();initForm();
-  $('srcNote').textContent='資料來源:'+(src==='gas'?'雲端(GAS)':src==='local'?'本機快取':'內建預設(尚未上傳)');
-  if(SYNC_URL&&src!=='gas'){$('srcNote').textContent+='(雲端讀取失敗,暫用備援)';}
-  await checkSheetConnection(false);await flushCompletionLogs(false);
-})();
+  let visibleRoutes=lowBatteryOnly(routes);
+  function updateSummary(){
+    const vehicles=visibleRoutes.flatMap(route=>route.vehicles);
+    const count20=vehicles.filter(vehicle=>vehicle[2]==="2.0").length;
+    const count20e=vehicles.filter(vehicle=>vehicle[2]==="2.0E").length;
+    document.getElementById("battery20Count").textContent=count20;
+    document.getElementById("battery20Unit").textContent=`顆 · ${count20} 輛待處理`;
+    document.getElementById("battery20eCount").textContent=count20e;
+    document.getElementById("battery20eUnit").textContent=`顆 · ${count20e} 輛待處理`;
+    document.getElementById("routeStationCount").textContent=`${visibleRoutes.length} 站`;
+    document.getElementById("routeVehicleCount").textContent=`${vehicles.length} 輛`;
+  }
+  const points=[[25.0022,121.4965],[24.9979,121.5018],[25.0048,121.5087],[24.9907,121.5144],[24.9931,121.5207]];
+  let map;
+  function initMap(){
+    if(map||!window.L)return;
+    map=L.map("map",{zoomControl:true,attributionControl:true}).setView([24.999,121.507],14);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OSM"}).addTo(map);
+    L.polyline(points,{color:"#171713",weight:5,opacity:.85}).addTo(map);
+    points.forEach((p,i)=>{
+      const marker=L.circleMarker(p,{radius:i?10:8,color:"#171713",weight:2,fillColor:i?"#ffd400":"#1769d2",fillOpacity:1}).addTo(map);
+      marker.bindTooltip(i?String(i):"起",{permanent:true,direction:"center",className:"route-marker"});
+    });
+    map.fitBounds(points,{padding:[25,25]});
+  }
+  function renderTasks(){
+    updateSummary();
+    document.getElementById("tasks").innerHTML=visibleRoutes.map((r,i)=>`
+      <article class="card task-card">
+        <div class="task-top">
+          <div class="order">${i+1}</div>
+          <div class="station"><h3>${r.station}</h3><p>${r.code} · 第 ${i+1} 站</p></div>
+          <div class="need"><b>${r.need}</b><span>輛待排除</span></div>
+        </div>
+        <div class="travel"><span>🚚 前往 ${r.station}</span><span>${r.mins} · ${r.km}</span></div>
+        <div class="vehicle-list">${r.vehicles.map(v=>`<div class="vehicle"><span class="plate">${v[0]}</span><span class="reason">${v[1]}</span><span class="battery-type">${v[2]}</span></div>`).join("")}</div>
+        <div class="task-actions"><button onclick="alert('已開啟 Google 導航預覽')">Google 導航</button><button class="done" data-work-order-id="${r.id}">完成此站</button></div>
+      </article>`).join("");
+    document.querySelectorAll("[data-work-order-id]").forEach(btn=>btn.addEventListener("click",()=>completeWorkOrder(btn.dataset.workOrderId,btn)));
+  }
+  function fetchCompletionSheet(){
+    return new Promise((resolve,reject)=>{
+      const callback=`completionSheet_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const script=document.createElement("script");
+      const timer=setTimeout(()=>finish(new Error("completion sheet timeout")),10000);
+      function finish(error,data){
+        clearTimeout(timer);delete window[callback];script.remove();
+        error?reject(error):resolve(data);
+      }
+      window[callback]=data=>finish(null,data);
+      script.onerror=()=>finish(new Error("completion sheet unavailable"));
+      script.src=`${COMPLETION_SHEET_URL}&tqx=out:json;responseHandler:${callback}&_=${Date.now()}`;
+      document.head.appendChild(script);
+    });
+  }
+  async function loadCompletedRecords(){
+    const localDone=JSON.parse(localStorage.getItem("maint_completed_vehicles_v2")||"[]");
+    let completedKeys=new Set(localDone);
+    try{
+      const data=await fetchCompletionSheet();
+      const labels=(data.table.cols||[]).map(col=>String(col.label||"").trim());
+      const stationIndex=labels.indexOf("場站代碼");
+      const vehicleIndex=labels.indexOf("自行車號");
+      if(stationIndex<0||vehicleIndex<0)throw new Error("completion columns missing");
+      (data.table.rows||[]).forEach(row=>{
+        const cells=row.c||[];
+        const station=cells[stationIndex]&&(cells[stationIndex].f??cells[stationIndex].v);
+        const vehicle=cells[vehicleIndex]&&(cells[vehicleIndex].f??cells[vehicleIndex].v);
+        if(station&&vehicle)completedKeys.add(completionKey(station,vehicle));
+      });
+      localStorage.setItem("maint_completed_vehicles_v2",JSON.stringify([...completedKeys]));
+      document.getElementById("dedupeStatus").textContent="✓ 已比對完成紀錄";
+    }catch(error){
+      document.getElementById("dedupeStatus").textContent="離線比對完成紀錄";
+    }
+    visibleRoutes=lowBatteryOnly(routes).map(route=>{
+      const vehicles=route.vehicles.filter(vehicle=>!completedKeys.has(completionKey(route.code,vehicle[0])));
+      return {...route,vehicles,need:vehicles.length};
+    }).filter(route=>route.vehicles.length>0);
+    renderTasks();
+  }
+  async function completeWorkOrder(id,button){
+    if(button.disabled)return;
+    button.disabled=true;
+    button.textContent="寫入完成紀錄…";
+    const route=routes.find(item=>item.id===id);
+    const localDone=new Set(JSON.parse(localStorage.getItem("maint_completed_vehicles_v2")||"[]"));
+    if(route)route.vehicles.forEach(vehicle=>localDone.add(completionKey(route.code,vehicle[0])));
+    localStorage.setItem("maint_completed_vehicles_v2",JSON.stringify([...localDone]));
+    try{
+      const response=await fetch(SYNC_URL,{
+        method:"POST",
+        headers:{"Content-Type":"text/plain;charset=utf-8"},
+        body:JSON.stringify({
+          op:"completeWO",id,
+          completedAt:new Date().toISOString(),
+          employee:document.getElementById("profileName").textContent,
+          zone:document.getElementById("zone").value,
+          station:route&&route.station,
+          vehicleIds:route?route.vehicles.map(v=>v[0]):[]
+        })
+      });
+      const result=await response.json();
+      if(!result||result.ok!==true)throw new Error("sync rejected");
+      button.textContent="已完成並同步";
+    }catch(error){
+      button.textContent="已完成（待同步）";
+    }
+    visibleRoutes=visibleRoutes.filter(item=>item.id!==id);
+    setTimeout(renderTasks,700);
+  }
+  function show(view){
+    const login=view==="login";
+    document.getElementById("loginView").classList.toggle("hidden",!login);
+    document.getElementById("dashboardView").classList.toggle("hidden",login);
+    document.getElementById("showLogin").classList.toggle("active",login);
+    document.getElementById("showDashboard").classList.toggle("active",!login);
+    if(!login)setTimeout(()=>{initMap();map&&map.invalidateSize()},80);
+    window.scrollTo({top:0,behavior:"instant"});
+  }
+  document.getElementById("startBtn").onclick=()=>{
+    const employee=document.getElementById("employee").value.trim();
+    const zone=document.getElementById("zone").value;
+    const vehicle=document.getElementById("vehicle").value.trim();
+    const location=document.getElementById("location").value.trim();
+    if(!employee||!zone||!vehicle||!location){document.getElementById("formError").textContent="請完成所有必填欄位";return}
+    document.getElementById("profileName").textContent=employee;
+    document.getElementById("avatar").textContent=employee.slice(0,2).toUpperCase();
+    document.getElementById("profileMeta").textContent=`${zone} · ${vehicle}`;
+    document.getElementById("profileShift").textContent=document.getElementById("shift").value;
+    show("dashboard");
+  };
+  document.getElementById("locateBtn").onclick=()=>{document.getElementById("location").value="捷運中和站";document.getElementById("locateBtn").textContent="✓ 已定位"};
+  document.getElementById("showLogin").onclick=()=>show("login");
+  document.getElementById("showDashboard").onclick=()=>show("dashboard");
+  setInterval(()=>document.getElementById("clock").textContent=new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"}),1000);
+  renderTasks();loadCompletedRecords();show("dashboard");
 </script>
 </body>
 </html>
