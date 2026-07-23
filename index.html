@@ -145,17 +145,15 @@
         </div>
 
         <div class="card feed">
-          <div class="feed-head"><span>同區動態｜G1 中和區</span><span>3 人在線</span></div>
-          <div class="feed-row"><div class="feed-num">陳</div><div class="feed-main"><b>陳柏宇 · 維修中</b><span>秀山國小 · 1 台</span></div><div class="feed-distance">1.2 km</div></div>
-          <div class="feed-row"><div class="feed-num">林</div><div class="feed-main"><b>林冠廷 · 前往中</b><span>新生街 112 巷口 · 2 台</span></div><div class="feed-distance">2.0 km</div></div>
-          <div class="feed-row"><div class="feed-num">我</div><div class="feed-main"><b>目前路線 · 待出發</b><span>捷運中和站 → 漳和國中</span></div><div class="feed-distance">0.0 km</div></div>
+          <div class="feed-head"><span id="feedZone">同區動態</span><span id="feedOnline">本次派工</span></div>
+          <div class="feed-row"><div class="feed-num">我</div><div class="feed-main"><b>目前路線 · 待出發</b><span id="feedRoute">尚未建立路線</span></div><div class="feed-distance" id="feedDistance">0.0 km</div></div>
         </div>
       </div>
 
       <div class="card map-card">
-        <div class="map-title"><b>距離優先派工路線</b><span>近 → 遠 · 共 4 站</span></div>
+        <div class="map-title"><b>距離優先派工路線</b><span id="mapStationCount">近 → 遠 · 共 0 站</span></div>
         <div id="map"></div>
-        <div class="route-summary">捷運中和站 → 漳和國中 → 枋寮公園 → 秀山國小 → 錦和運動公園</div>
+        <div class="route-summary" id="routeSummary">尚未建立路線</div>
       </div>
 
       <div class="work-title"><h2>接下來的工單</h2><span id="dedupeStatus">正在比對完成紀錄…</span></div>
@@ -171,12 +169,7 @@
   const ZONE_INFO={G1:"中和區",G2:"永和區",K1:"板橋區",K2:"土城區",B0:"台大校內外",B1:"大安區",B2:"文山區",J:"新店分區",C1:"大同區",D1:"萬華區",D2:"中正區",H:"蘆洲區（五股）",H1:"三重區",H2:"林口分區",E1:"士林區",E2:"北投區",L:"淡水分區",A2:"南港區",F:"七星分區",N:"瑞芳分區",C2:"中山區",A3:"內湖區",A1:"信義區",C3:"松山區",I:"新莊區",M:"樹三鶯區"};
   const ZONE_ORDER=["G1","G2","K1","K2","B0","B1","B2","J","C1","D1","D2","E1","E2","L","A2","F","N","C2","A3","A1","C3","H","H1","H2","I","M"];
   let dispatchFormRows=[];
-  const routes=[
-    {id:"LOWBAT-500207003-117357-120683",station:"漳和國中",code:"500207003",km:"0.8 km",mins:"4 分",need:2,vehicles:[["117357","3% 2.0低電量禁用（優先）","2.0"],["120683","7% 2.0E低電量禁用（優先）","2.0E"]]},
-    {id:"LOWBAT-500204090-030522-021588-026017",station:"枋寮公園",code:"500204090",km:"1.6 km",mins:"6 分",need:3,vehicles:[["030522","6% 2.0低電量禁用（優先）","2.0"],["021588","8% 2.0低電量禁用（優先）","2.0"],["026017","7% 2.0E低電量禁用（優先）","2.0E"]]},
-    {id:"LOWBAT-500104055-020430-011209",station:"秀山國小",code:"500104055",km:"2.7 km",mins:"8 分",need:2,vehicles:[["020430","5% 2.0低電量禁用（優先）","2.0"],["011209","9% 2.0E低電量禁用（優先）","2.0E"]]},
-    {id:"LOWBAT-500113044-030309-016163-020138",station:"錦和運動公園",code:"500113044",km:"4.1 km",mins:"11 分",need:3,vehicles:[["030309","11% 2.0低電量禁用（優先）","2.0"],["016163","12% 2.0低電量禁用（優先）","2.0"],["020138","5% 2.0E低電量禁用（優先）","2.0E"]]}
-  ];
+  let routes=[];
   const DISPATCH_KEYWORD="低電量禁用";
   const completionKey=(stationCode,vehicleId)=>`${String(stationCode||"").trim()}|${String(vehicleId||"").trim()}`;
   function lowBatteryOnly(sourceRoutes){
@@ -200,18 +193,70 @@
     document.getElementById("routeStationCount").textContent=`${visibleRoutes.length} 站`;
     document.getElementById("routeVehicleCount").textContent=`${vehicles.length} 輛`;
   }
-  const points=[[25.0022,121.4965],[24.9979,121.5018],[25.0048,121.5087],[24.9907,121.5144],[24.9931,121.5207]];
+  let routePoints=[];
   let map;
   function initMap(){
-    if(map||!window.L)return;
-    map=L.map("map",{zoomControl:true,attributionControl:true}).setView([24.999,121.507],14);
+    if(!window.L)return;
+    if(map){map.remove();map=null}
+    const center=routePoints[0]||[25.033,121.565];
+    map=L.map("map",{zoomControl:true,attributionControl:true}).setView(center,14);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OSM"}).addTo(map);
-    L.polyline(points,{color:"#171713",weight:5,opacity:.85}).addTo(map);
-    points.forEach((p,i)=>{
+    if(routePoints.length>1)L.polyline(routePoints,{color:"#171713",weight:5,opacity:.85}).addTo(map);
+    routePoints.forEach((p,i)=>{
       const marker=L.circleMarker(p,{radius:i?10:8,color:"#171713",weight:2,fillColor:i?"#ffd400":"#1769d2",fillOpacity:1}).addTo(map);
       marker.bindTooltip(i?String(i):"起",{permanent:true,direction:"center",className:"route-marker"});
     });
-    map.fitBounds(points,{padding:[25,25]});
+    if(routePoints.length>1)map.fitBounds(routePoints,{padding:[25,25]});
+  }
+  function parseCoords(value){
+    const parts=String(value||"").split(",").map(Number);
+    return parts.length===2&&parts.every(Number.isFinite)?parts:null;
+  }
+  function haversine(a,b){
+    if(!a||!b)return Number.POSITIVE_INFINITY;
+    const rad=x=>x*Math.PI/180,R=6371;
+    const dLat=rad(b[0]-a[0]),dLng=rad(b[1]-a[1]);
+    const s=Math.sin(dLat/2)**2+Math.cos(rad(a[0]))*Math.cos(rad(b[0]))*Math.sin(dLng/2)**2;
+    return 2*R*Math.asin(Math.sqrt(s));
+  }
+  function resolveStartPoint(location,zone){
+    const coords=parseCoords(location);
+    if(coords)return coords;
+    const target=String(location||"").trim();
+    const match=dispatchFormRows.find(row=>row.zone===zone&&(row.stationRaw===target||row.stationRaw.replace(/^\d{9}/,"").trim()===target));
+    return match?parseCoords(match.coords):null;
+  }
+  function buildZoneRoutes(zone,startPoint){
+    const grouped=new Map();
+    dispatchFormRows.filter(row=>row.zone===zone).forEach(row=>{
+      const code=(row.stationRaw.match(/^\d{9}/)||[""])[0];
+      const station=row.stationRaw.replace(/^\d{9}/,"").trim()||row.stationRaw;
+      const key=code||station;
+      if(!grouped.has(key))grouped.set(key,{id:`LOWBAT-${key}`,station,code,coords:parseCoords(row.coords),vehicles:[]});
+      const type=row.reason.includes("2.0E")?"2.0E":"2.0";
+      grouped.get(key).vehicles.push([row.vehicle,row.reason,type,row.completed]);
+    });
+    const pending=[...grouped.values()];
+    const ordered=[];let current=startPoint;
+    while(pending.length){
+      pending.sort((a,b)=>haversine(current,a.coords)-haversine(current,b.coords));
+      const next=pending.shift();
+      const km=haversine(current,next.coords);
+      next.km=Number.isFinite(km)?`${km.toFixed(1)} km`:"距離待確認";
+      next.mins=Number.isFinite(km)?`${Math.max(1,Math.round(km/0.35))} 分`:"時間待確認";
+      next.need=next.vehicles.length;ordered.push(next);
+      if(next.coords)current=next.coords;
+    }
+    return ordered;
+  }
+  function updateRouteContext(zone,startLabel,startPoint){
+    const area=ZONE_INFO[zone]||zone;
+    document.getElementById("feedZone").textContent=`同區動態｜${zone} ${area}`;
+    document.getElementById("feedRoute").textContent=routes.length?`${startLabel} → ${routes[0].station}`:"此分區目前無待派工單";
+    document.getElementById("feedDistance").textContent=routes[0]&&routes[0].km||"0.0 km";
+    document.getElementById("mapStationCount").textContent=`近 → 遠 · 共 ${routes.length} 站`;
+    document.getElementById("routeSummary").textContent=routes.length?[startLabel,...routes.map(route=>route.station)].join(" → "):"此分區目前無待派工單";
+    routePoints=[startPoint,...routes.map(route=>route.coords).filter(Boolean)].filter(Boolean);
   }
   function renderTasks(){
     updateSummary();
@@ -372,6 +417,13 @@
     document.getElementById("avatar").textContent=employee.slice(0,2).toUpperCase();
     document.getElementById("profileMeta").textContent=`${zone} · ${vehicle}`;
     document.getElementById("profileShift").textContent=document.getElementById("shift").value;
+    const startPoint=resolveStartPoint(location,zone);
+    if(!startPoint){document.getElementById("formError").textContent="目前地點無法辨識，請選擇該分區場站或輸入緯度,經度";return}
+    routes=buildZoneRoutes(zone,startPoint);
+    visibleRoutes=lowBatteryOnly(routes);
+    updateRouteContext(zone,location,startPoint);
+    renderTasks();
+    loadCompletedRecords();
     show("dashboard");
   };
   document.getElementById("zone").addEventListener("change",buildStationList);
