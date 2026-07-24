@@ -79,7 +79,10 @@
     @media(min-width:620px){
       .dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.dashboard-grid .card{margin-bottom:0}
     }
-  </style>
+  .single-report{margin-left:auto;font:inherit;font-size:11px;font-weight:700;padding:3px 8px;border:1px solid currentColor;border-radius:6px;background:transparent;color:#0b62c4;cursor:pointer}
+.single-report:disabled{opacity:.55;cursor:default}
+.vehicle{display:flex;align-items:center;gap:8px}
+</style>
 </head>
 <body>
 <div class="app">
@@ -234,7 +237,7 @@
       const key=code||station;
       if(!grouped.has(key))grouped.set(key,{id:`LOWBAT-${key}`,station,code,coords:parseCoords(row.coords),vehicles:[]});
       const type=row.reason.includes("2.0E")?"2.0E":"2.0";
-      grouped.get(key).vehicles.push([row.vehicle,row.reason,type,row.completed]);
+      grouped.get(key).vehicles.push([row.vehicle,row.reason,type,row.completed,row.dock,row.source]);
     });
     const pending=[...grouped.values()];
     const ordered=[];let current=startPoint;
@@ -268,11 +271,23 @@
           <div class="need"><b>${r.need}</b><span>輛待排除</span></div>
         </div>
         <div class="travel"><span>🚚 前往 ${r.station}</span><span>${r.mins} · ${r.km}</span></div>
-        <div class="vehicle-list">${r.vehicles.map(v=>`<div class="vehicle"><span class="plate">${v[0]}</span><span class="reason">${v[1]}</span><span class="battery-type">${v[2]}</span></div>`).join("")}</div>
+        <div class="vehicle-list">${r.vehicles.map(v=>`<div class="vehicle"><span class="plate">${v[0]}</span><span class="reason">${v[1]}</span><span class="battery-type">${v[2]}</span><button class="single-report" data-code="${r.code}" data-station="${r.station}" data-bike="${v[0]}" data-reason="${String(v[1]||"").replace(/"/g,"&quot;")}" data-dock="${v[4]||""}" data-source="${v[5]||""}">單台回報</button></div>`).join("")}</div>
         <div class="task-actions"><button onclick="alert('已開啟 Google 導航預覽')">Google 導航</button><button class="done" data-work-order-id="${r.id}">完成此站</button></div>
       </article>`).join("");
     document.querySelectorAll("[data-work-order-id]").forEach(btn=>btn.addEventListener("click",()=>completeWorkOrder(btn.dataset.workOrderId,btn)));
+    document.querySelectorAll(".single-report").forEach(btn=>btn.addEventListener("click",()=>reportSingleVehicle(btn.dataset.code,btn.dataset.station,btn.dataset.bike,btn.dataset.reason,btn,btn.dataset.dock,btn.dataset.source)));
   }
+  /* 表頭名稱可能有多種寫法,取第一個找到的 */
+  function pickCol(labels,names){
+    for(const n of names){const i=labels.indexOf(n);if(i>=0)return i}
+    return -1;
+  }
+  /* 電量包在原因字串裡(例:14%2.0E低電量禁用)→ 抽出 "14%" */
+  function pickBattery(reason){
+    const m=String(reason||"").match(/(\d{1,3})\s*%/);
+    return m?m[1]+"%":"";
+  }
+
   function fetchSheetData(url,prefix){
     return new Promise((resolve,reject)=>{
       const callback=`${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -301,7 +316,10 @@
       const indexes={
         vehicle:labels.indexOf("車號"),station:labels.indexOf("鎖車場站"),
         reason:labels.indexOf("維修通報原因"),coords:labels.indexOf("座標"),
-        zone:labels.indexOf("區域代號"),completed:labels.indexOf("完成註記")
+        zone:labels.indexOf("區域代號"),completed:labels.indexOf("完成註記"),
+        dock:pickCol(labels,["柱號","主柱號","鎖柱號","主鎖柱號","柱位"]),
+        source:pickCol(labels,["來源"]),
+        district:pickCol(labels,["分區"])
       };
       if(indexes.station<0||indexes.reason<0||indexes.zone<0)throw new Error("dispatch columns missing");
       dispatchFormRows=(data.table.rows||[]).map(row=>({
@@ -310,7 +328,10 @@
         reason:cellValue(row,indexes.reason),
         coords:cellValue(row,indexes.coords),
         zone:cellValue(row,indexes.zone),
-        completed:indexes.completed>=0?cellValue(row,indexes.completed):""
+        completed:indexes.completed>=0?cellValue(row,indexes.completed):"",
+        dock:indexes.dock>=0?cellValue(row,indexes.dock):"",
+        source:indexes.source>=0?cellValue(row,indexes.source):"",
+        district:indexes.district>=0?cellValue(row,indexes.district):""
       })).filter(row=>row.zone&&row.reason.includes(DISPATCH_KEYWORD)&&row.completed!=="已完成");
       const counts={};
       dispatchFormRows.forEach(row=>counts[row.zone]=(counts[row.zone]||0)+1);
@@ -377,6 +398,30 @@
     renderTasks();
   }
   /* ═══ 同步佇列:送不出去就排隊,下次進來自動補送 ═══ */
+  /* 班次紀錄ID:一次派工共用一組(對應表上的「紀錄ID」欄) */
+  let SESSION_ID="";
+  const empNow=()=>document.getElementById("profileName").textContent.trim();
+  const truckNow=()=>document.getElementById("vehicle").value.trim();
+  const zoneNow=()=>document.getElementById("zone").value;
+
+  function buildPayload(way,recordId,code,station,vehicles){
+    return{
+      op:"completeWO",
+      id:`LOWBAT-${code}`,          // 舊後端仍以此維護待派清單
+      recordId,                      // → 紀錄ID
+      completedAt:new Date().toISOString(),
+      employee:empNow(),
+      truck:truckNow(),              // → 車號/車牌
+      zone:zoneNow(),
+      way,                           // → 回報方式
+      stationCode:code,
+      station,
+      vehicles,                      // [{id,reason}] → 自行車號 / 維修原因
+      vehicleIds:vehicles.map(v=>v.id),
+      qid:`${recordId}|${code}|${vehicles.map(v=>v.id).join(",")}`
+    };
+  }
+
   /* 待同步但畫面先隱藏:避免同仁被要求重做已修好的車 */
   const PENDING_HIDE_KEY="maint_pending_hidden_v1";
   function pendingHideRead(){try{return new Set(JSON.parse(localStorage.getItem(PENDING_HIDE_KEY)||"[]"))}catch(e){return new Set()}}
@@ -387,8 +432,8 @@
   const SYNC_QUEUE_KEY="maint_sync_queue_v1";
   function queueRead(){try{return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY)||"[]")}catch(e){return[]}}
   function queueWrite(q){try{localStorage.setItem(SYNC_QUEUE_KEY,JSON.stringify(q))}catch(e){}}
-  function queueAdd(p){const q=queueRead();if(!q.some(x=>x.id===p.id)){q.push(p);queueWrite(q)}}
-  function queueDrop(id){queueWrite(queueRead().filter(x=>x.id!==id))}
+  function queueAdd(p){const q=queueRead();if(!q.some(x=>x.qid===p.qid)){q.push(p);queueWrite(q)}}
+  function queueDrop(qid){queueWrite(queueRead().filter(x=>x.qid!==qid))}
   function queueCount(){return queueRead().length}
 
   /* 送一筆:先正常 POST(可讀回應確認);被 CORS 擋就改 no-cors 再送一次
@@ -416,7 +461,7 @@
   async function flushQueue(){
     const q=queueRead();if(!q.length)return 0;
     let ok=0;
-    for(const p of q){const r=await sendOne(p);if(r==="ok"){queueDrop(p.id);ok++}}
+    for(const p of q){const r=await sendOne(p);if(r==="ok"){queueDrop(p.qid);ok++}}
     updateSyncBadge();return ok;
   }
 
@@ -443,34 +488,51 @@
 
   async function completeWorkOrder(id,button){
     if(button.disabled)return;
-    button.disabled=true;
-    button.textContent="寫入完成紀錄…";
+    button.disabled=true;button.textContent="寫入完成紀錄…";
     const route=routes.find(item=>item.id===id);
-    const payload={
-      op:"completeWO",id,
-      completedAt:new Date().toISOString(),
-      employee:document.getElementById("profileName").textContent,
-      zone:document.getElementById("zone").value,
-      station:route&&route.station,
-      stationCode:route&&route.code,
-      vehicleIds:route?route.vehicles.map(v=>v[0]):[]
-    };
-    queueAdd(payload);                       // 先入列,確認寫入才移除
+    if(!route){button.textContent="查無此站";return}
+    const vehicles=route.vehicles.map(v=>({id:v[0],reason:v[1]||"",dock:v[4]||"",source:v[5]||"",battery:pickBattery(v[1])}));
+    const payload=buildPayload("本站完成",SESSION_ID,route.code,route.station,vehicles);
+    queueAdd(payload);
     const res=await sendOne(payload);
+    const keys=vehicles.map(v=>completionKey(route.code,v.id));
     if(res==="ok"){
-      queueDrop(id);
+      queueDrop(payload.qid);
       const done=new Set(JSON.parse(localStorage.getItem("maint_completed_vehicles_v2")||"[]"));
-      if(route)route.vehicles.forEach(v=>done.add(completionKey(route.code,v[0])));
+      keys.forEach(k=>done.add(k));
       localStorage.setItem("maint_completed_vehicles_v2",JSON.stringify([...done]));
       button.textContent="已完成並同步";
     }else{
-      /* 未確認寫入:畫面先隱藏(不讓同仁重做),但保留在佇列持續重送 */
-      if(route)pendingHideAdd(route.vehicles.map(v=>completionKey(route.code,v[0])));
+      pendingHideAdd(keys);
       button.textContent=res==="sent"?"已送出（待對帳）":`已完成（待同步 ${queueCount()} 筆）`;
     }
     updateSyncBadge();
     visibleRoutes=visibleRoutes.filter(item=>item.id!==id);
     setTimeout(renderTasks,700);
+  }
+
+  /* 單台回報:只回報該站其中一台 */
+  async function reportSingleVehicle(code,station,bike,reason,button,dock,source){
+    if(button.disabled)return;
+    button.disabled=true;button.textContent="回報中…";
+    const recordId=`${empNow()}-r${Date.now()}`;
+    const payload=buildPayload("單台回報",recordId,code,station,[{id:bike,reason:reason||"",dock:dock||"",source:source||"",battery:pickBattery(reason)}]);
+    queueAdd(payload);
+    const res=await sendOne(payload);
+    const key=completionKey(code,bike);
+    if(res==="ok"){
+      queueDrop(payload.qid);
+      const done=new Set(JSON.parse(localStorage.getItem("maint_completed_vehicles_v2")||"[]"));
+      done.add(key);
+      localStorage.setItem("maint_completed_vehicles_v2",JSON.stringify([...done]));
+    }else pendingHideAdd([key]);
+    updateSyncBadge();
+    visibleRoutes=visibleRoutes.map(r=>{
+      if(r.code!==code)return r;
+      const vs=r.vehicles.filter(v=>v[0]!==bike);
+      return{...r,vehicles:vs,need:vs.length};
+    }).filter(r=>r.vehicles.length>0);
+    setTimeout(renderTasks,500);
   }
   function show(view){
     const login=view==="login";
@@ -491,6 +553,7 @@
     document.getElementById("profileShift").textContent=document.getElementById("shift").value;
     const startPoint=resolveStartPoint(location,zone);
     if(!startPoint){document.getElementById("formError").textContent="目前地點無法辨識，請選擇該分區場站或輸入緯度,經度";return}
+    SESSION_ID=`${employee}-${Date.now()}`;
     routes=buildZoneRoutes(zone,startPoint);
     visibleRoutes=lowBatteryOnly(routes);
     updateRouteContext(zone,location,startPoint);
