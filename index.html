@@ -438,23 +438,54 @@
 
   /* 送一筆:先正常 POST(可讀回應確認);被 CORS 擋就改 no-cors 再送一次
      no-cors 仍會確實送達 GAS 並寫入表單,只是讀不到回應 → 標記為待對帳 */
+  let LAST_SYNC="(尚未送出)";
   async function sendOne(payload){
     try{
       const r=await fetch(SYNC_URL,{method:"POST",
         headers:{"Content-Type":"text/plain;charset=utf-8"},
         body:JSON.stringify(payload)});
       const t=await r.text();
+      LAST_SYNC=`HTTP ${r.status} ｜ ${t.slice(0,600)}`;
+      showDebug();
       let j=null;try{j=JSON.parse(t)}catch(e){}
       if(j&&j.ok===true)return"ok";
       throw new Error(j&&j.error?j.error:"rejected");
     }catch(e){
+      LAST_SYNC=(LAST_SYNC==="(尚未送出)"||LAST_SYNC.startsWith("送出失敗"))
+        ? `送出失敗:${e.message||e}` : LAST_SYNC;
+      showDebug();
       try{
         await fetch(SYNC_URL,{method:"POST",mode:"no-cors",
           headers:{"Content-Type":"text/plain;charset=utf-8"},
           body:JSON.stringify(payload)});
+        LAST_SYNC+=" ｜ 已改用 no-cors 重送(讀不到回應)";
+        showDebug();
         return"sent";
-      }catch(e2){return"fail"}
+      }catch(e2){
+        LAST_SYNC+=` ｜ no-cors 也失敗:${e2.message||e2}`;
+        showDebug();
+        return"fail";
+      }
     }
+  }
+  /* 把伺服器原始回應顯示在畫面上,方便現場排查 */
+  function showDebug(){
+    let box=document.getElementById("syncDebug");
+    if(!box){
+      box=document.createElement("div");
+      box.id="syncDebug";
+      box.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#111;color:#0f0;"+
+        "font:12px/1.5 monospace;padding:8px 34px 8px 10px;max-height:38vh;overflow:auto;white-space:pre-wrap;word-break:break-all";
+      const x=document.createElement("button");
+      x.textContent="×";
+      x.style.cssText="position:absolute;top:4px;right:6px;background:transparent;color:#0f0;border:1px solid #0f0;"+
+        "border-radius:4px;font:14px monospace;cursor:pointer;width:22px;height:22px;line-height:1";
+      x.onclick=()=>box.remove();
+      box.appendChild(x);
+      const p=document.createElement("div");p.id="syncDebugTxt";box.appendChild(p);
+      document.body.appendChild(box);
+    }
+    document.getElementById("syncDebugTxt").textContent="【同步回應】"+LAST_SYNC;
   }
 
   /* 補送整個佇列(確認成功才移除;GAS 以工單編號去重,重送安全) */
