@@ -411,6 +411,7 @@
       recordId,                      // → 紀錄ID
       completedAt:new Date().toISOString(),
       employee:empNow(),
+      vehicle:truckNow(),            // → 維修完成紀錄的車號/車牌
       truck:truckNow(),              // → 車號/車牌
       zone:zoneNow(),
       way,                           // → 回報方式
@@ -521,7 +522,7 @@
     if(button.disabled)return;
     button.disabled=true;button.textContent="寫入完成紀錄…";
     const route=routes.find(item=>item.id===id);
-    if(!route){button.textContent="查無此站";return}
+    if(!route){button.disabled=false;button.textContent="查無此站";return}
     const vehicles=route.vehicles.map(v=>({id:v[0],reason:v[1]||"",dock:v[4]||"",source:v[5]||"",battery:pickBattery(v[1])}));
     const payload=buildPayload("本站完成",SESSION_ID,route.code,route.station,vehicles);
     queueAdd(payload);

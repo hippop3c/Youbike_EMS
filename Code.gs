@@ -17,6 +17,11 @@ var GOOGLE_FORM_ID = '';
 var WORK_ORDER_FIELD = '工單編號（系統比對用）';
 var COMPLETION_SPREADSHEET_ID = '1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo';
 var COMPLETION_SHEET_NAME = '維修完成紀錄';
+var DISPATCH_SHEET_NAME = '派工總表';
+var COMPLETION_HEADERS = [
+  '紀錄ID', '完成時間', '寫入時間', '員工編號', '車號/車牌', '責任區',
+  '回報方式', '場站代碼', '場站名稱', '自行車號', '車柱', '維修原因'
+];
 
 function doGet(e) {
   try {
@@ -69,6 +74,18 @@ function doPost(e) {
     if (op === 'completeWO') {
       var workOrderId = normalizeWorkOrderId_(body.id);
       if (!workOrderId) throw new Error('缺少工單編號 id');
+      var completedAt = body.completedAt || new Date().toISOString();
+      var vehicleItems = Array.isArray(body.vehicles) ? body.vehicles : [];
+      if (!vehicleItems.length) throw new Error('缺少已完成車輛資料');
+
+      // 完成紀錄保留同仁及作業資訊；派工總表則直接寫入「已完成」。
+      // 先找出待更新的派工列，避免只留下完成紀錄卻沒有工單註記。
+      var dispatchUpdate = prepareDispatchCompletion_(body, vehicleItems);
+      var loggedCount = appendCompletionRecords_(body, workOrderId, completedAt, vehicleItems);
+      if (loggedCount !== vehicleItems.length) throw new Error('完成紀錄寫入筆數不完整');
+      var dispatchRowsUpdated = writeDispatchCompletion_(dispatchUpdate);
+      if (dispatchRowsUpdated < vehicleItems.length) throw new Error('派工總表完成註記寫入筆數不完整');
+
       var done = readJson_('completed', []);
       var existing = -1;
       for (var d = 0; d < done.length; d++) {
@@ -76,11 +93,12 @@ function doPost(e) {
       }
       var completedRec = {
         id: workOrderId,
-        completedAt: body.completedAt || new Date().toISOString(),
+        completedAt: completedAt,
         employee: String(body.employee || ''),
         station: String(body.station || ''),
+        stationCode: String(body.stationCode || ''),
         zone: String(body.zone || ''),
-        vehicleIds: Array.isArray(body.vehicleIds) ? body.vehicleIds : []
+        vehicleIds: vehicleItems.map(function (x) { return String(x && x.id || ''); })
       };
       if (existing >= 0) done[existing] = completedRec;
       else done.push(completedRec);
@@ -92,7 +110,13 @@ function doPost(e) {
         return normalizeWorkOrderId_(item && item.id) !== workOrderId;
       });
       writeJson_('workorders', pending);
-      return jsonOutput_({ ok: true, id: workOrderId, duplicate: existing >= 0 });
+      return jsonOutput_({
+        ok: true,
+        id: workOrderId,
+        duplicate: existing >= 0,
+        completedRows: loggedCount,
+        dispatchRowsUpdated: dispatchRowsUpdated
+      });
     }
 
     var zone = safeKey_(body.zone || '');
@@ -166,6 +190,106 @@ function completedIdMap_() {
 
 function normalizeWorkOrderId_(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 120);
+}
+
+function appendCompletionRecords_(body, workOrderId, completedAt, vehicles) {
+  var sheet = SpreadsheetApp.openById(COMPLETION_SPREADSHEET_ID).getSheetByName(COMPLETION_SHEET_NAME);
+  if (!sheet) throw new Error('找不到維修完成紀錄工作表');
+  var headerInfo = ensureCompletionHeaders_(sheet);
+
+  var lastColumn = Math.max(sheet.getLastColumn(), headerInfo.values.length);
+  var index = {};
+  headerInfo.values.forEach(function (name, i) { index[String(name).trim()] = i; });
+  var rows = vehicles.map(function (vehicle) {
+    var row = Array(lastColumn).fill('');
+    setByHeader_(row, index, '紀錄ID', workOrderId);
+    setByHeader_(row, index, '完成時間', completedAt);
+    setByHeader_(row, index, '寫入時間', new Date().toISOString());
+    setByHeader_(row, index, '員工編號', String(body.employee || ''));
+    setByHeader_(row, index, '車號/車牌', String(body.vehicle || ''));
+    setByHeader_(row, index, '責任區', String(body.zone || ''));
+    setByHeader_(row, index, '回報方式', '前台完成');
+    setByHeader_(row, index, '場站代碼', String(body.stationCode || ''));
+    setByHeader_(row, index, '場站名稱', String(body.station || ''));
+    setByHeader_(row, index, '自行車號', String(vehicle && vehicle.id || ''));
+    setByHeader_(row, index, '維修原因', String(vehicle && vehicle.reason || '低電量禁用'));
+    return row;
+  });
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, lastColumn).setValues(rows);
+  SpreadsheetApp.flush();
+  return rows.length;
+}
+
+function ensureCompletionHeaders_(sheet) {
+  var required = ['紀錄ID', '完成時間', '員工編號', '場站代碼', '自行車號'];
+  var existing = findHeaderRow_(sheet, required);
+  if (existing) return existing;
+
+  // 既有分頁完全空白時，直接建立標準完成紀錄表頭。
+  if (sheet.getLastRow() === 0 || sheet.getLastColumn() === 0) {
+    sheet.getRange(1, 1, 1, COMPLETION_HEADERS.length).setValues([COMPLETION_HEADERS]);
+    return { row: 1, values: COMPLETION_HEADERS.slice() };
+  }
+  throw new Error('維修完成紀錄缺少必要欄位');
+}
+
+function prepareDispatchCompletion_(body, vehicles) {
+  var sheet = SpreadsheetApp.openById(COMPLETION_SPREADSHEET_ID).getSheetByName(DISPATCH_SHEET_NAME);
+  if (!sheet) throw new Error('找不到派工總表工作表');
+  var headerInfo = findHeaderRow_(sheet, ['車號', '鎖車場站', '完成註記']);
+  if (!headerInfo) throw new Error('派工總表缺少車號、鎖車場站或完成註記欄位');
+
+  var vehicleIndex = headerInfo.values.indexOf('車號');
+  var stationIndex = headerInfo.values.indexOf('鎖車場站');
+  var noteIndex = headerInfo.values.indexOf('完成註記');
+  var firstRow = headerInfo.row + 1;
+  var rowCount = Math.max(0, sheet.getLastRow() - headerInfo.row);
+  if (!rowCount) throw new Error('派工總表沒有可完成的工單');
+
+  var values = sheet.getRange(firstRow, 1, rowCount, sheet.getLastColumn()).getDisplayValues();
+  var targetVehicles = {};
+  vehicles.forEach(function (vehicle) { targetVehicles[String(vehicle && vehicle.id || '').trim()] = true; });
+  var targetCode = String(body.stationCode || '').trim();
+  var matchedRows = [];
+  values.forEach(function (row, index) {
+    var vehicle = String(row[vehicleIndex] || '').trim();
+    var station = String(row[stationIndex] || '').trim();
+    var stationCode = (station.match(/^\d{9}/) || [''])[0];
+    if (targetVehicles[vehicle] && (!targetCode || stationCode === targetCode)) matchedRows.push(index);
+  });
+  if (matchedRows.length < vehicles.length) throw new Error('派工總表找不到相符的待完成車輛');
+
+  var notesRange = sheet.getRange(firstRow, noteIndex + 1, rowCount, 1);
+  return { sheet: sheet, notesRange: notesRange, matchedRows: matchedRows };
+}
+
+function writeDispatchCompletion_(update) {
+  var notes = update.notesRange.getDisplayValues();
+  var formulas = update.notesRange.getFormulas();
+  var hasFormula = formulas.some(function (row) { return String(row[0] || '') !== ''; });
+
+  // 舊版 L 欄是陣列公式。首次直接寫入時，保留目前顯示的狀態並轉成固定註記。
+  if (hasFormula) update.notesRange.clearContent();
+  update.matchedRows.forEach(function (rowIndex) { notes[rowIndex][0] = '已完成'; });
+  update.notesRange.setValues(notes);
+  SpreadsheetApp.flush();
+  return update.matchedRows.length;
+}
+
+function findHeaderRow_(sheet, requiredHeaders) {
+  if (sheet.getLastColumn() < 1) return null;
+  var scanRows = Math.min(10, Math.max(1, sheet.getLastRow()));
+  var values = sheet.getRange(1, 1, scanRows, sheet.getLastColumn()).getDisplayValues();
+  for (var i = 0; i < values.length; i++) {
+    var names = values[i].map(function (x) { return String(x).trim(); });
+    var allFound = requiredHeaders.every(function (name) { return names.indexOf(name) >= 0; });
+    if (allFound) return { row: i + 1, values: names };
+  }
+  return null;
+}
+
+function setByHeader_(row, index, header, value) {
+  if (Object.prototype.hasOwnProperty.call(index, header)) row[index[header]] = value;
 }
 
 function readCompletedSheet_() {
