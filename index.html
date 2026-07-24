@@ -353,50 +353,122 @@
       const stationIndex=labels.indexOf("場站代碼");
       const vehicleIndex=labels.indexOf("自行車號");
       if(stationIndex<0||vehicleIndex<0)throw new Error("completion columns missing");
+      const sheetKeys=new Set();
       (data.table.rows||[]).forEach(row=>{
         const cells=row.c||[];
         const station=cells[stationIndex]&&(cells[stationIndex].f??cells[stationIndex].v);
         const vehicle=cells[vehicleIndex]&&(cells[vehicleIndex].f??cells[vehicleIndex].v);
-        if(station&&vehicle)completedKeys.add(completionKey(station,vehicle));
+        if(station&&vehicle)sheetKeys.add(completionKey(station,vehicle));
       });
+      sheetKeys.forEach(k=>completedKeys.add(k));
       localStorage.setItem("maint_completed_vehicles_v2",JSON.stringify([...completedKeys]));
-      document.getElementById("dedupeStatus").textContent="✓ 已比對完成紀錄";
+      pendingHideDrop([...sheetKeys]);      // 表單已確認 → 解除暫時隱藏
+      reconcileQueue(completedKeys);
     }catch(error){
       document.getElementById("dedupeStatus").textContent="離線比對完成紀錄";
     }
+    await flushQueue();
+    updateSyncBadge();
+    const hideKeys=new Set([...completedKeys,...pendingHideRead()]);
     visibleRoutes=lowBatteryOnly(routes).map(route=>{
-      const vehicles=route.vehicles.filter(vehicle=>!completedKeys.has(completionKey(route.code,vehicle[0])));
+      const vehicles=route.vehicles.filter(vehicle=>!hideKeys.has(completionKey(route.code,vehicle[0])));
       return {...route,vehicles,need:vehicles.length};
     }).filter(route=>route.vehicles.length>0);
     renderTasks();
   }
+  /* ═══ 同步佇列:送不出去就排隊,下次進來自動補送 ═══ */
+  /* 待同步但畫面先隱藏:避免同仁被要求重做已修好的車 */
+  const PENDING_HIDE_KEY="maint_pending_hidden_v1";
+  function pendingHideRead(){try{return new Set(JSON.parse(localStorage.getItem(PENDING_HIDE_KEY)||"[]"))}catch(e){return new Set()}}
+  function pendingHideSave(s){try{localStorage.setItem(PENDING_HIDE_KEY,JSON.stringify([...s]))}catch(e){}}
+  function pendingHideAdd(keys){const s=pendingHideRead();keys.forEach(k=>s.add(k));pendingHideSave(s)}
+  function pendingHideDrop(keys){const s=pendingHideRead();keys.forEach(k=>s.delete(k));pendingHideSave(s)}
+
+  const SYNC_QUEUE_KEY="maint_sync_queue_v1";
+  function queueRead(){try{return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY)||"[]")}catch(e){return[]}}
+  function queueWrite(q){try{localStorage.setItem(SYNC_QUEUE_KEY,JSON.stringify(q))}catch(e){}}
+  function queueAdd(p){const q=queueRead();if(!q.some(x=>x.id===p.id)){q.push(p);queueWrite(q)}}
+  function queueDrop(id){queueWrite(queueRead().filter(x=>x.id!==id))}
+  function queueCount(){return queueRead().length}
+
+  /* 送一筆:先正常 POST(可讀回應確認);被 CORS 擋就改 no-cors 再送一次
+     no-cors 仍會確實送達 GAS 並寫入表單,只是讀不到回應 → 標記為待對帳 */
+  async function sendOne(payload){
+    try{
+      const r=await fetch(SYNC_URL,{method:"POST",
+        headers:{"Content-Type":"text/plain;charset=utf-8"},
+        body:JSON.stringify(payload)});
+      const t=await r.text();
+      let j=null;try{j=JSON.parse(t)}catch(e){}
+      if(j&&j.ok===true)return"ok";
+      throw new Error(j&&j.error?j.error:"rejected");
+    }catch(e){
+      try{
+        await fetch(SYNC_URL,{method:"POST",mode:"no-cors",
+          headers:{"Content-Type":"text/plain;charset=utf-8"},
+          body:JSON.stringify(payload)});
+        return"sent";
+      }catch(e2){return"fail"}
+    }
+  }
+
+  /* 補送整個佇列(確認成功才移除;GAS 以工單編號去重,重送安全) */
+  async function flushQueue(){
+    const q=queueRead();if(!q.length)return 0;
+    let ok=0;
+    for(const p of q){const r=await sendOne(p);if(r==="ok"){queueDrop(p.id);ok++}}
+    updateSyncBadge();return ok;
+  }
+
+  /* 與表單對帳:已出現在「維修完成紀錄」的就從佇列移除 */
+  function reconcileQueue(completedKeys){
+    const q=queueRead();
+    const keep=q.filter(p=>{
+      const ids=p.vehicleIds||[];if(!ids.length)return false;
+      return !ids.every(v=>completedKeys.has(completionKey(p.stationCode||"",v)));
+    });
+    if(keep.length!==q.length)queueWrite(keep);
+  }
+
+  function updateSyncBadge(){
+    const el=document.getElementById("dedupeStatus");if(!el)return;
+    const n=queueCount();
+    if(n>0){el.innerHTML=`⚠ 待同步 ${n} 筆 <a href="#" id="retrySync" style="color:inherit">重試</a>`;
+      const b=document.getElementById("retrySync");
+      if(b)b.onclick=async ev=>{ev.preventDefault();el.textContent="補送中…";
+        const done=await flushQueue();
+        el.textContent=done?`✓ 已補送 ${done} 筆`:`⚠ 待同步 ${queueCount()} 筆`;};
+    }else el.textContent="✓ 已同步";
+  }
+
   async function completeWorkOrder(id,button){
     if(button.disabled)return;
     button.disabled=true;
     button.textContent="寫入完成紀錄…";
     const route=routes.find(item=>item.id===id);
-    const localDone=new Set(JSON.parse(localStorage.getItem("maint_completed_vehicles_v2")||"[]"));
-    if(route)route.vehicles.forEach(vehicle=>localDone.add(completionKey(route.code,vehicle[0])));
-    localStorage.setItem("maint_completed_vehicles_v2",JSON.stringify([...localDone]));
-    try{
-      const response=await fetch(SYNC_URL,{
-        method:"POST",
-        headers:{"Content-Type":"text/plain;charset=utf-8"},
-        body:JSON.stringify({
-          op:"completeWO",id,
-          completedAt:new Date().toISOString(),
-          employee:document.getElementById("profileName").textContent,
-          zone:document.getElementById("zone").value,
-          station:route&&route.station,
-          vehicleIds:route?route.vehicles.map(v=>v[0]):[]
-        })
-      });
-      const result=await response.json();
-      if(!result||result.ok!==true)throw new Error("sync rejected");
+    const payload={
+      op:"completeWO",id,
+      completedAt:new Date().toISOString(),
+      employee:document.getElementById("profileName").textContent,
+      zone:document.getElementById("zone").value,
+      station:route&&route.station,
+      stationCode:route&&route.code,
+      vehicleIds:route?route.vehicles.map(v=>v[0]):[]
+    };
+    queueAdd(payload);                       // 先入列,確認寫入才移除
+    const res=await sendOne(payload);
+    if(res==="ok"){
+      queueDrop(id);
+      const done=new Set(JSON.parse(localStorage.getItem("maint_completed_vehicles_v2")||"[]"));
+      if(route)route.vehicles.forEach(v=>done.add(completionKey(route.code,v[0])));
+      localStorage.setItem("maint_completed_vehicles_v2",JSON.stringify([...done]));
       button.textContent="已完成並同步";
-    }catch(error){
-      button.textContent="已完成（待同步）";
+    }else{
+      /* 未確認寫入:畫面先隱藏(不讓同仁重做),但保留在佇列持續重送 */
+      if(route)pendingHideAdd(route.vehicles.map(v=>completionKey(route.code,v[0])));
+      button.textContent=res==="sent"?"已送出（待對帳）":`已完成（待同步 ${queueCount()} 筆）`;
     }
+    updateSyncBadge();
     visibleRoutes=visibleRoutes.filter(item=>item.id!==id);
     setTimeout(renderTasks,700);
   }
