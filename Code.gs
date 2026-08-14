@@ -10,6 +10,8 @@ var CHUNK_SIZE = 6500; // Script Properties 單值限制內的安全大小（Bas
 var MAX_ZONE_ACTS = 200;
 var ACT_TTL_MS = 12 * 60 * 60 * 1000;
 var MAX_COMPLETED = 5000;
+var TAIPEI_TIME_ZONE = 'Asia/Taipei';
+var SHEET_TIMESTAMP_FORMAT = 'yyyy-mm-dd hh:mm:ss.000';
 
 // 貼上低電量派工 Google 表單的 ID 後，手動執行一次 setupDispatchForm。
 // 表單網址若為 https://docs.google.com/forms/d/ABC123/edit，ID 就是 ABC123。
@@ -74,7 +76,7 @@ function doPost(e) {
     if (op === 'completeWO') {
       var workOrderId = normalizeWorkOrderId_(body.id);
       if (!workOrderId) throw new Error('缺少工單編號 id');
-      var completedAt = body.completedAt || new Date().toISOString();
+      var completedAt = taipeiIsoTimestamp_(body.completedAt || new Date());
       var vehicleItems = Array.isArray(body.vehicles) ? body.vehicles : [];
       if (!vehicleItems.length) throw new Error('缺少已完成車輛資料');
 
@@ -193,18 +195,21 @@ function normalizeWorkOrderId_(value) {
 }
 
 function appendCompletionRecords_(body, workOrderId, completedAt, vehicles) {
-  var sheet = SpreadsheetApp.openById(COMPLETION_SPREADSHEET_ID).getSheetByName(COMPLETION_SHEET_NAME);
+  var spreadsheet = openCompletionSpreadsheet_();
+  var sheet = spreadsheet.getSheetByName(COMPLETION_SHEET_NAME);
   if (!sheet) throw new Error('找不到維修完成紀錄工作表');
   var headerInfo = ensureCompletionHeaders_(sheet);
 
   var lastColumn = Math.max(sheet.getLastColumn(), headerInfo.values.length);
   var index = {};
   headerInfo.values.forEach(function (name, i) { index[String(name).trim()] = i; });
+  var completedDate = validDate_(completedAt);
+  var writtenDate = new Date();
   var rows = vehicles.map(function (vehicle) {
     var row = Array(lastColumn).fill('');
     setByHeader_(row, index, '紀錄ID', workOrderId);
-    setByHeader_(row, index, '完成時間', completedAt);
-    setByHeader_(row, index, '寫入時間', new Date().toISOString());
+    setByHeader_(row, index, '完成時間', completedDate);
+    setByHeader_(row, index, '寫入時間', writtenDate);
     setByHeader_(row, index, '員工編號', String(body.employee || ''));
     setByHeader_(row, index, '車號/車牌', String(body.vehicle || ''));
     setByHeader_(row, index, '責任區', String(body.zone || ''));
@@ -215,9 +220,67 @@ function appendCompletionRecords_(body, workOrderId, completedAt, vehicles) {
     setByHeader_(row, index, '維修原因', String(vehicle && vehicle.reason || '低電量禁用'));
     return row;
   });
-  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, lastColumn).setValues(rows);
+  var startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, rows.length, lastColumn).setValues(rows);
+  formatTimestampColumns_(sheet, index, startRow, rows.length);
   SpreadsheetApp.flush();
   return rows.length;
+}
+
+function validDate_(value) {
+  var date = value instanceof Date ? value : new Date(String(value || ''));
+  return isNaN(date.getTime()) ? new Date() : date;
+}
+
+function taipeiIsoTimestamp_(value) {
+  return Utilities.formatDate(validDate_(value), TAIPEI_TIME_ZONE, "yyyy-MM-dd'T'HH:mm:ss.SSS") + '+08:00';
+}
+
+function openCompletionSpreadsheet_() {
+  var spreadsheet = SpreadsheetApp.openById(COMPLETION_SPREADSHEET_ID);
+  if (spreadsheet.getSpreadsheetTimeZone() !== TAIPEI_TIME_ZONE) {
+    spreadsheet.setSpreadsheetTimeZone(TAIPEI_TIME_ZONE);
+  }
+  return spreadsheet;
+}
+
+function formatTimestampColumns_(sheet, index, startRow, rowCount) {
+  ['完成時間', '寫入時間'].forEach(function (header) {
+    if (Object.prototype.hasOwnProperty.call(index, header)) {
+      sheet.getRange(startRow, index[header] + 1, rowCount, 1).setNumberFormat(SHEET_TIMESTAMP_FORMAT);
+    }
+  });
+}
+
+/** 手動執行一次：把既有 UTC ISO 字串轉為台北時區的試算表日期欄位。 */
+function migrateCompletionTimestampsToTaipei() {
+  var spreadsheet = openCompletionSpreadsheet_();
+  var sheet = spreadsheet.getSheetByName(COMPLETION_SHEET_NAME);
+  if (!sheet) throw new Error('找不到維修完成紀錄工作表');
+  var headerInfo = ensureCompletionHeaders_(sheet);
+  var index = {};
+  headerInfo.values.forEach(function (name, i) { index[String(name).trim()] = i; });
+  var firstDataRow = headerInfo.row + 1;
+  var rowCount = Math.max(0, sheet.getLastRow() - headerInfo.row);
+  if (!rowCount) return 0;
+  var converted = 0;
+  ['完成時間', '寫入時間'].forEach(function (header) {
+    if (!Object.prototype.hasOwnProperty.call(index, header)) return;
+    var range = sheet.getRange(firstDataRow, index[header] + 1, rowCount, 1);
+    var values = range.getValues();
+    var formulas = range.getFormulas();
+    values.forEach(function (row, rowIndex) {
+      if (formulas[rowIndex][0] || !row[0] || row[0] instanceof Date) return;
+      var parsed = new Date(String(row[0]));
+      if (!isNaN(parsed.getTime())) {
+        range.getCell(rowIndex + 1, 1).setValue(parsed);
+        converted++;
+      }
+    });
+    range.setNumberFormat(SHEET_TIMESTAMP_FORMAT);
+  });
+  SpreadsheetApp.flush();
+  return converted;
 }
 
 function ensureCompletionHeaders_(sheet) {
