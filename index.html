@@ -82,7 +82,7 @@
     .vehicle:last-child{border:0}.plate{font-weight:900;background:#eef0f4;border-radius:5px;text-align:center}.reason{color:var(--muted)}
     .battery-type{font-size:.62rem;color:#fff;background:#6e7785;border-radius:5px;padding:2px 5px;font-weight:900}
     .task-actions{display:flex;gap:8px;padding:0 13px 13px}.task-actions button,.task-actions a{flex:1;display:grid;place-items:center;border:1.5px solid var(--ink);border-radius:9px;padding:10px;color:var(--ink);font-weight:900;background:#fff;text-decoration:none;text-align:center}.task-actions .done{background:var(--green);color:#fff;border-color:var(--green)}
-    .completed-panel{margin-top:22px}.completed-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px}.completed-head h2{font-size:1rem;margin:0}.completed-search{width:min(230px,55%);height:40px;border:1.5px solid #cfcbbe;border-radius:9px;padding:0 10px}.completed-item{display:grid;grid-template-columns:1fr auto;gap:7px 12px;padding:12px 0;border-top:1px dashed var(--line)}.completed-item:first-child{border-top:0}.completed-item b{font-size:.82rem}.completed-item p{grid-column:1;margin:0;color:var(--muted);font-size:.7rem}.completed-item button{grid-column:2;grid-row:1/3;border:1.5px solid var(--red);border-radius:8px;background:#fff;color:var(--red);font-size:.7rem;font-weight:900;padding:7px 9px}.completed-empty{padding:12px 0;color:var(--muted);font-size:.76rem;text-align:center}
+    .completed-panel{margin-top:22px;padding:0;overflow:hidden}.completed-summary{display:flex;align-items:center;gap:10px;padding:16px;cursor:pointer;font-size:1rem;font-weight:900;list-style:none}.completed-summary::-webkit-details-marker{display:none}.completed-summary:after{content:"展開";margin-left:auto;color:var(--blue);font-size:.72rem}.completed-panel[open] .completed-summary:after{content:"收合"}.completed-count{min-width:28px;border-radius:99px;background:var(--yellow);padding:3px 8px;text-align:center;font-size:.68rem}.completed-body{padding:0 16px 16px}.completed-search{width:100%;height:40px;margin-bottom:8px;border:1.5px solid #cfcbbe;border-radius:9px;padding:0 10px}.completed-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:11px 0;border-top:1px dashed var(--line)}.completed-station{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem;font-weight:800}.completed-vehicle{font-size:.8rem;font-variant-numeric:tabular-nums}.completed-item button{border:1.5px solid var(--red);border-radius:8px;background:#fff;color:var(--red);font-size:.7rem;font-weight:900;padding:7px 9px}.completed-item button:disabled{opacity:.55;cursor:wait}.completed-empty{padding:12px 0;color:var(--muted);font-size:.76rem;text-align:center}
     .demo-nav{position:fixed;z-index:600;bottom:15px;left:50%;transform:translateX(-50%);display:flex;gap:6px;padding:5px;background:rgba(23,23,19,.92);border-radius:99px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
     .demo-nav button{border:0;border-radius:99px;padding:8px 13px;background:transparent;color:#fff;font-size:.7rem;font-weight:800}.demo-nav button.active{background:var(--yellow);color:var(--ink)}
     @media(min-width:620px){
@@ -173,10 +173,13 @@
 
       <div class="work-title"><h2>接下來的工單</h2><span id="dedupeStatus">正在比對完成紀錄…</span></div>
       <div id="tasks"></div>
-      <section class="card completed-panel">
-        <div class="completed-head"><h2>已完成任務</h2><input class="completed-search" id="completedSearch" type="search" placeholder="搜尋站名、車號" autocomplete="off"></div>
-        <div id="completedTasks"><div class="completed-empty">尚無完成紀錄</div></div>
-      </section>
+      <details class="card completed-panel" id="completedPanel">
+        <summary class="completed-summary"><span>已完成任務</span><span class="completed-count" id="completedCount">0 筆</span></summary>
+        <div class="completed-body">
+          <input class="completed-search" id="completedSearch" type="search" placeholder="搜尋場站、車號" autocomplete="off">
+          <div id="completedTasks"><div class="completed-empty">尚無完成紀錄</div></div>
+        </div>
+      </details>
     </section>
   </main>
 </div>
@@ -668,7 +671,12 @@
     const state=applyCompletionOperations(completedLocalRead(),baseRows,[{payload,syncState}],employee,shift);
     completedLocalSave(state.keys);
     saveCompletedHistoryScope(state.rows,employee,shift);
-    if(currentScope){completedTaskRows=state.rows;renderCompletedTasks()}
+    if(currentScope){
+      completedTaskRows=state.rows;
+      const panel=document.getElementById("completedPanel");
+      if(panel&&state.rows.length)panel.open=true;
+      renderCompletedTasks();
+    }
   }
   function removeCompletedHistoryItem(item){
     const employee=String(item.employee||"");
@@ -690,15 +698,16 @@
   function renderCompletedTasks(){
     const host=document.getElementById("completedTasks");
     const query=document.getElementById("completedSearch").value.trim().toLowerCase();
+    document.getElementById("completedCount").textContent=`${completedTaskRows.length} 筆`;
     const shown=completedTaskRows.filter(item=>[
       item.stationCode,item.station,item.vehicleId,item.reason,item.completedAt,item.shift
     ].some(value=>String(value||"").toLowerCase().includes(query)));
     if(!shown.length){host.innerHTML='<div class="completed-empty">尚無符合的完成紀錄</div>';return}
     host.innerHTML=shown.map((item,index)=>`
       <div class="completed-item">
-        <b>${escapeHtml(item.station||item.stationCode)} · ${escapeHtml(item.vehicleId)}</b>
-        <p>${escapeHtml(item.reason||"低電量禁用")}｜${escapeHtml(item.completedAt||"")}｜${escapeHtml(item.syncState||"已同步")}</p>
-        <button type="button" data-undo-completed="${index}" ${item.syncState!=="已同步"?"disabled":""}>${item.syncState==="還原待同步"?"還原待同步":item.syncState==="已同步"?"改為未完成":"等待同步"}</button>
+        <span class="completed-station">${escapeHtml(item.station||item.stationCode)}</span>
+        <b class="completed-vehicle">${escapeHtml(item.vehicleId)}</b>
+        <button type="button" data-undo-completed="${index}" ${item.syncState!=="已同步"?"disabled":""}>${item.syncState==="還原待同步"?"取消中":item.syncState==="已同步"?"取消完成":"同步中"}</button>
       </div>`).join("");
     document.querySelectorAll("[data-undo-completed]").forEach(button=>button.addEventListener("click",()=>undoCompletedTask(shown[Number(button.dataset.undoCompleted)],button)));
   }
@@ -711,7 +720,8 @@
     const contextIsCurrent=()=>sequence===completedLoadSequence&&selectedMutationVersion===completionMutationVersion&&
       completionMutationsInFlight===0&&selectedShift===shiftNow()&&selectedEmployee===empNow()&&selectedSession===SESSION_ID;
     let serverKeys=completedLocalRead();
-    let serverHistory=completedHistoryLocalRead().filter(item=>String(item.employee||"")===selectedEmployee&&normalizedClientShift(item.shift)===selectedShift);
+    const localScopeHistory=completedHistoryLocalRead().filter(item=>String(item.employee||"")===selectedEmployee&&normalizedClientShift(item.shift)===selectedShift);
+    let serverHistory=localScopeHistory.slice();
     let sheetLoaded=false;
     try{
       const data=await fetchCompletionSheet();
@@ -728,16 +738,17 @@
       const workOrderIndex=labels.indexOf("工單編號");
       const dispatchSheetIndex=labels.indexOf("派工總表");
       if(stationIndex<0||vehicleIndex<0)throw new Error("completion columns missing");
+      const hasHistoryScopeColumns=employeeIndex>=0&&shiftIndex>=0&&dispatchSheetIndex>=0;
       serverKeys=new Set();
-      serverHistory=[];
+      if(hasHistoryScopeColumns)serverHistory=[];
       (data.table.rows||[]).forEach(row=>{
         const cells=row.c||[];
         const value=index=>index>=0&&cells[index]?String(cells[index].f??cells[index].v??"").trim():"";
         const station=value(stationIndex),vehicle=value(vehicleIndex);
-        const rowShift=normalizedClientShift(value(shiftIndex));
+        const rowShift=shiftIndex>=0?normalizedClientShift(value(shiftIndex)):"早";
         const rowDispatchSheet=value(dispatchSheetIndex)||defaultDispatchSheetForShift(rowShift);
         if(station&&vehicle)serverKeys.add(completionKey(rowShift,rowDispatchSheet,station,vehicle));
-        if(station&&vehicle&&value(employeeIndex)===selectedEmployee&&rowShift===selectedShift){
+        if(hasHistoryScopeColumns&&station&&vehicle&&value(employeeIndex)===selectedEmployee&&rowShift===selectedShift){
           const dispatchSheet=rowDispatchSheet;
           serverHistory.push({
             recordId:value(recordIndex),workOrderId:value(workOrderIndex)||`LOWBAT-${SHIFT_WORK_ORDER_KEY[rowShift]}-${station}`,
@@ -747,6 +758,17 @@
           });
         }
       });
+      // 舊完成表沒有班別/人員範圍欄時，只拿它做去重，不能用空結果清掉裝置上的本人紀錄。
+      // 新完成剛寫入時 GViz 也可能短暫仍是舊快照，因此保留近 15 分鐘的本機成功紀錄。
+      if(hasHistoryScopeColumns){
+        const historyKeys=new Set(serverHistory.map(completedHistoryIdentity));
+        const recentCutoff=Date.now()-15*60*1000;
+        localScopeHistory.forEach(item=>{
+          if(!historyKeys.has(completedHistoryIdentity(item))&&completedTimestamp(item.completedAt)>=recentCutoff){
+            serverHistory.push(item);
+          }
+        });
+      }
       sheetLoaded=true;
       await reconcileQueue(serverKeys);
       if(!contextIsCurrent())return;
@@ -1264,7 +1286,7 @@
     queueAdd(payload);
     const result=await flushQueuedPayload(payload.qid);
     if(result==="rejected"||result==="cancelled"){
-      button.disabled=false;button.textContent="改為未完成";
+      button.disabled=false;button.textContent="取消完成";
       finishMutation();
       await refreshAfterRejected(payload,actionSession,"還原被拒絕，已更新最新派工資料");
       return;

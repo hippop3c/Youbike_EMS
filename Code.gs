@@ -11,6 +11,7 @@ var MAX_ZONE_ACTS = 200;
 var ACT_TTL_MS = 12 * 60 * 60 * 1000;
 var MAX_COMPLETED = 5000;
 var MAX_ASSIGNMENT_ITEMS = 5;
+var APP_VERSION = 'v2';
 var TAIPEI_TIME_ZONE = 'Asia/Taipei';
 var SHEET_TIMESTAMP_FORMAT = 'yyyy-mm-dd hh:mm:ss.000';
 
@@ -38,6 +39,9 @@ var UNDO_HEADERS = COMPLETION_HEADERS.concat(['撤銷時間', '撤銷ID', '撤�
 function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
+    if (String(p.health || '') === '1') {
+      return jsonOutput_({ ok: true, version: APP_VERSION, shifts: ['早', '晚', '夜'] });
+    }
     if (String(p.wo || '') === '1') {
       return jsonOutput_(readJson_('workorders', []));
     }
@@ -1005,14 +1009,26 @@ function setByHeader_(row, index, header, value) {
 
 function readCompletedSheet_() {
   var sheet = SpreadsheetApp.openById(COMPLETION_SPREADSHEET_ID).getSheetByName(COMPLETION_SHEET_NAME);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  var values = sheet.getDataRange().getDisplayValues();
-  var headers = values.shift();
+  if (!sheet || sheet.getLastRow() < 1) return [];
+  var headerInfo = findHeaderRow_(sheet, ['場站代碼', '自行車號']);
+  if (!headerInfo) throw new Error('維修完成紀錄缺少表頭');
+  var rowCount = Math.max(0, sheet.getLastRow() - headerInfo.row);
+  if (!rowCount) return [];
+  var headers = headerInfo.values;
+  var values = sheet.getRange(
+    headerInfo.row + 1, 1, rowCount, Math.max(sheet.getLastColumn(), headers.length)
+  ).getDisplayValues();
   var stationIndex = headers.indexOf('場站代碼');
   var vehicleIndex = headers.indexOf('自行車號');
   var reasonIndex = headers.indexOf('維修原因');
   var completedIndex = headers.indexOf('完成時間');
   var recordIndex = headers.indexOf('紀錄ID');
+  var employeeIndex = headers.indexOf('員工編號');
+  var truckIndex = headers.indexOf('車號/車牌');
+  var zoneIndex = headers.indexOf('責任區');
+  var wayIndex = headers.indexOf('回報方式');
+  var stationNameIndex = headers.indexOf('場站名稱');
+  var dockIndex = headers.indexOf('車柱');
   var shiftIndex = headers.indexOf('班別');
   var dispatchSheetIndex = headers.indexOf('派工總表');
   var workOrderIndex = headers.indexOf('工單編號');
@@ -1026,6 +1042,12 @@ function readCompletedSheet_() {
       vehicleId: row[vehicleIndex],
       reason: reasonIndex >= 0 ? row[reasonIndex] : '',
       completedAt: completedIndex >= 0 ? row[completedIndex] : '',
+      employee: employeeIndex >= 0 ? row[employeeIndex] : '',
+      vehicle: truckIndex >= 0 ? row[truckIndex] : '',
+      zone: zoneIndex >= 0 ? row[zoneIndex] : '',
+      way: wayIndex >= 0 ? row[wayIndex] : '',
+      station: stationNameIndex >= 0 ? row[stationNameIndex] : '',
+      dock: dockIndex >= 0 ? row[dockIndex] : '',
       shift: shiftIndex >= 0 ? row[shiftIndex] : '',
       dispatchSheet: dispatchSheetIndex >= 0 ? row[dispatchSheetIndex] : '',
       workOrderId: workOrderIndex >= 0 ? row[workOrderIndex] : ''
