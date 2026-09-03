@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <meta name="theme-color" content="#ffd400">
-  <title>維護派工前台 v1</title>
+  <title>維護派工前台 v2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;800;900&display=swap" rel="stylesheet">
@@ -36,9 +36,14 @@
     .location-row{display:flex;gap:8px}.location-row input{min-width:0}
     .locate{flex:0 0 82px;border:1.5px solid var(--ink);border-radius:10px;background:var(--yellow);font-weight:900}
     .primary{width:100%;border:0;border-radius:11px;background:var(--ink);color:var(--yellow);font-weight:900;letter-spacing:.14em;padding:15px;box-shadow:4px 4px 0 #bbb7aa}
+    .primary:disabled{cursor:wait;opacity:.55;box-shadow:none}
     .form-error{min-height:1.2em;color:var(--red);font-size:.78rem;font-weight:700;margin-top:10px}
     .source-note{display:flex;gap:9px;align-items:center;padding:11px 13px;border:1px dashed #bdb8a7;border-radius:12px;background:#fbfaf5;font-size:.78rem;color:var(--muted)}
     .source-note b{color:var(--ink)}
+    .loading-view{min-height:55vh;display:grid;place-items:center;text-align:center;font-weight:900;color:var(--muted)}
+    .loading-view b{display:block;color:var(--ink);font-size:1.05rem;margin-bottom:5px}
+    .loading-view button{display:none;margin:16px auto 0;border:1.5px solid var(--ink);border-radius:9px;background:var(--yellow);color:var(--ink);padding:9px 16px;font-weight:900}
+    .loading-view.is-error button{display:block}
     .hidden{display:none!important}
     .battery-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}
     .battery{position:relative;overflow:hidden;border:1.5px solid var(--ink);border-radius:14px;padding:14px;background:#fff}
@@ -47,6 +52,7 @@
     .profile{display:grid;grid-template-columns:48px 1fr auto;gap:11px;align-items:center}
     .avatar{width:48px;height:48px;display:grid;place-items:center;border-radius:13px;background:var(--ink);color:var(--yellow);font-weight:900}
     .profile h2{font-size:1rem;margin:0 0 3px}.profile p{font-size:.74rem;margin:0;color:var(--muted)}
+    .switch-profile{grid-column:1/-1;border:1px solid var(--line);border-radius:8px;background:#fff;padding:7px;font-size:.7rem;font-weight:800;color:var(--muted)}
     .shift{align-self:start;border-radius:99px;background:var(--yellow);padding:4px 9px;font-size:.7rem;font-weight:900}
     .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:13px}
     .stat{border-top:1px solid var(--line);padding-top:10px}.stat b{display:block;font-size:.92rem}.stat span{font-size:.66rem;color:var(--muted)}
@@ -76,6 +82,7 @@
     .vehicle:last-child{border:0}.plate{font-weight:900;background:#eef0f4;border-radius:5px;text-align:center}.reason{color:var(--muted)}
     .battery-type{font-size:.62rem;color:#fff;background:#6e7785;border-radius:5px;padding:2px 5px;font-weight:900}
     .task-actions{display:flex;gap:8px;padding:0 13px 13px}.task-actions button,.task-actions a{flex:1;display:grid;place-items:center;border:1.5px solid var(--ink);border-radius:9px;padding:10px;color:var(--ink);font-weight:900;background:#fff;text-decoration:none;text-align:center}.task-actions .done{background:var(--green);color:#fff;border-color:var(--green)}
+    .completed-panel{margin-top:22px}.completed-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px}.completed-head h2{font-size:1rem;margin:0}.completed-search{width:min(230px,55%);height:40px;border:1.5px solid #cfcbbe;border-radius:9px;padding:0 10px}.completed-item{display:grid;grid-template-columns:1fr auto;gap:7px 12px;padding:12px 0;border-top:1px dashed var(--line)}.completed-item:first-child{border-top:0}.completed-item b{font-size:.82rem}.completed-item p{grid-column:1;margin:0;color:var(--muted);font-size:.7rem}.completed-item button{grid-column:2;grid-row:1/3;border:1.5px solid var(--red);border-radius:8px;background:#fff;color:var(--red);font-size:.7rem;font-weight:900;padding:7px 9px}.completed-empty{padding:12px 0;color:var(--muted);font-size:.76rem;text-align:center}
     .demo-nav{position:fixed;z-index:600;bottom:15px;left:50%;transform:translateX(-50%);display:flex;gap:6px;padding:5px;background:rgba(23,23,19,.92);border-radius:99px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
     .demo-nav button{border:0;border-radius:99px;padding:8px 13px;background:transparent;color:#fff;font-size:.7rem;font-weight:800}.demo-nav button.active{background:var(--yellow);color:var(--ink)}
     @media(min-width:620px){
@@ -89,44 +96,45 @@
 <body>
 <div class="app">
   <header class="topbar">
-    <div class="brand">維護派工前台 <small>v1</small></div>
+    <div class="brand">維護派工前台 <small>v2</small></div>
     <div class="clock" id="clock">--:--</div>
   </header>
   <main>
-    <section id="loginView">
+    <section id="loadingView" class="loading-view"><div><b id="loadingTitle">同步最新派工資料</b><span id="loadingMessage">請稍候…</span><button id="retryLoad" type="button">重新同步</button></div></section>
+    <section id="loginView" class="hidden">
       <div class="login-intro">
         <div class="eyebrow">FIELD SERVICE · FRONT DESK</div>
         <h1>開始今天的派工</h1>
         <p>填寫基本資料後，系統將依距離安排低電量工單。</p>
       </div>
-      <div class="card">
+      <form class="card" id="dispatchLoginForm" autocomplete="on">
         <div class="field">
-          <label for="employee">員工編號 <span class="req">*</span></label>
-          <input id="employee" placeholder="例：A12345" autocomplete="off">
+          <label for="employee">帳號 / 員工編號 <span class="req">*</span></label>
+          <input id="employee" name="username" placeholder="例：A12345" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="shift">班別 <span class="req">*</span></label>
+          <select id="shift" name="shift"><option value="早" selected>早</option><option value="晚">晚</option><option value="夜">夜</option></select>
         </div>
         <div class="field">
           <label for="zone">責任分區 <span class="req">*</span></label>
-          <select id="zone"><option value="">正在讀取派工總表…</option></select>
+          <select id="zone" name="zone" disabled><option value="">正在讀取早班派工總表…</option></select>
         </div>
         <div class="field">
           <label for="vehicle">車號 / 車牌 <span class="req">*</span></label>
-          <input id="vehicle" placeholder="例：KEA-1234" autocomplete="off">
+          <input id="vehicle" name="vehicle" placeholder="例：KEA-1234" autocomplete="on">
         </div>
         <div class="field">
           <label for="location">目前地點 <span class="req">*</span></label>
           <div class="location-row">
-            <input id="location" list="stationList" placeholder="輸入場站名稱 或 緯度,經度" autocomplete="off">
+            <input id="location" name="location" list="stationList" placeholder="輸入場站名稱 或 緯度,經度" autocomplete="street-address">
             <button class="locate" id="locateBtn" type="button">📍 定位</button>
           </div>
           <datalist id="stationList"></datalist>
         </div>
-        <div class="field">
-          <label for="shift">班別 <span class="req">*</span></label>
-          <select id="shift"><option selected>早班</option><option>午班</option><option>晚班</option><option>大夜班</option></select>
-        </div>
-        <button class="primary" id="startBtn" type="button">開始派工</button>
+        <button class="primary" id="startBtn" type="submit" disabled>開始派工</button>
         <div class="form-error" id="formError"></div>
-      </div>
+      </form>
       <div class="source-note"><span>🔗</span><div><b>派工來源：Google 表單</b><br>僅讀取低電量待處理工單，不提供檔案上傳。</div></div>
     </section>
 
@@ -141,7 +149,8 @@
         <div class="card profile">
           <div class="avatar" id="avatar">A1</div>
           <div><h2 id="profileName">A12345</h2><p id="profileMeta">G1 中和區 · KEA-1234</p></div>
-          <div class="shift" id="profileShift">早班</div>
+          <div class="shift" id="profileShift">早</div>
+          <button class="switch-profile" id="switchProfile" type="button">切換帳號 / 班別</button>
           <div class="stats" style="grid-column:1/-1">
             <div class="stat"><b id="routeStationCount">4 站</b><span>本次路線</span></div>
             <div class="stat"><b id="routeVehicleCount">10 輛</b><span>低電量車</span></div>
@@ -164,6 +173,10 @@
 
       <div class="work-title"><h2>接下來的工單</h2><span id="dedupeStatus">正在比對完成紀錄…</span></div>
       <div id="tasks"></div>
+      <section class="card completed-panel">
+        <div class="completed-head"><h2>已完成任務</h2><input class="completed-search" id="completedSearch" type="search" placeholder="搜尋站名、車號" autocomplete="off"></div>
+        <div id="completedTasks"><div class="completed-empty">尚無完成紀錄</div></div>
+      </section>
     </section>
   </main>
 </div>
@@ -171,15 +184,81 @@
 <script>
   const SYNC_URL="https://script.google.com/macros/s/AKfycbydwoiMGGsP3XQJBhs6BxRiwWF8bBoIfCZ6GjJH7HIUkQLmRlqCyfGvWycsYed7VAUb/exec";
   const COMPLETION_SHEET_URL="https://docs.google.com/spreadsheets/d/1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo/gviz/tq?headers=1&sheet=%E7%B6%AD%E4%BF%AE%E5%AE%8C%E6%88%90%E7%B4%80%E9%8C%84";
-  const DISPATCH_SHEET_URL="https://docs.google.com/spreadsheets/d/1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo/gviz/tq?headers=3&sheet=%E6%B4%BE%E5%B7%A5%E7%B8%BD%E8%A1%A8";
+  const DISPATCH_SHEET_BASE_URL="https://docs.google.com/spreadsheets/d/1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo/gviz/tq";
+  const SHIFT_DISPATCH_SHEETS=Object.freeze({
+    早:["早班派工總表","早派工總表","早班總表","早班","早","派工總表"],
+    晚:["晚班派工總表","晚派工總表","晚班總表","晚班","晚"],
+    夜:["夜班派工總表","夜派工總表","大夜班派工總表","夜班總表","夜班","夜"]
+  });
+  const SHIFT_WORK_ORDER_KEY=Object.freeze({早:"EARLY",晚:"LATE",夜:"NIGHT"});
   const ZONE_INFO={G1:"中和區",G2:"永和區",K1:"板橋區",K2:"土城區",B0:"台大校內外",B1:"大安區",B2:"文山區",J:"新店分區",C1:"大同區",D1:"萬華區",D2:"中正區",H:"蘆洲區（五股）",H1:"三重區",H2:"林口分區",E1:"士林區",E2:"北投區",L:"淡水分區",A2:"南港區",F:"七星分區",N:"瑞芳分區",C2:"中山區",A3:"內湖區",A1:"信義區",C3:"松山區",I:"新莊區",M:"樹三鶯區"};
   const ZONE_ORDER=["G1","G2","K1","K2","B0","B1","B2","J","C1","D1","D2","E1","E2","L","A2","F","N","C2","A3","A1","C3","H","H1","H2","I","M"];
+  const MAX_ASSIGNMENT_ITEMS=5;
   const GOOGLE_ROUTE_DESTINATION_LIMIT=4; // 行動版 Google Maps：每段最多 3 個中途點 + 1 個終點
   let dispatchFormRows=[];
+  let activeDispatchSheet="";
+  let activeDispatchShift="";
+  let dispatchLoadSequence=0;
+  let completedLoadSequence=0;
+  let completionMutationVersion=0;
+  let completionMutationsInFlight=0;
   let routes=[];
   let routeStartPoint=null;
+  let routeStartLabel="";
+  let completedTaskRows=[];
   const DISPATCH_KEYWORD="低電量禁用";
-  const completionKey=(stationCode,vehicleId)=>`${String(stationCode||"").trim()}|${String(vehicleId||"").trim()}`;
+  const LOGIN_SESSION_KEY="maint_login_session_v1";
+  const COMPLETED_STORAGE_KEY="maint_completed_vehicles_v4";
+  const LEGACY_COMPLETED_STORAGE_KEYS=["maint_completed_vehicles_v3","maint_completed_vehicles_v2"];
+  const COMPLETED_HISTORY_STORAGE_KEY="maint_completed_history_v1";
+  const defaultDispatchSheetForShift=shift=>normalizedClientShift(shift)==="早"?"派工總表":String((SHIFT_DISPATCH_SHEETS[normalizedClientShift(shift)]||[])[0]||"");
+  const completionKey=(shift,dispatchSheet,stationCode,vehicleId)=>[
+    normalizedClientShift(shift),String(dispatchSheet||defaultDispatchSheetForShift(shift)).trim(),
+    String(stationCode||"").trim(),String(vehicleId||"").trim()
+  ].join("|");
+  function migrateLegacyKeys(values){
+    return (Array.isArray(values)?values:[]).map(value=>{
+      const parts=String(value||"").split("|");
+      if(parts.length===4)return String(value||"");
+      if(parts.length===3)return completionKey(parts[0],defaultDispatchSheetForShift(parts[0]),parts[1],parts[2]);
+      return parts.length===2?completionKey("早","派工總表",parts[0],parts[1]):"";
+    }).filter(Boolean);
+  }
+  function completedLocalRead(){
+    try{
+      const current=JSON.parse(localStorage.getItem(COMPLETED_STORAGE_KEY)||"[]");
+      const legacy=LEGACY_COMPLETED_STORAGE_KEYS.flatMap(key=>JSON.parse(localStorage.getItem(key)||"[]"));
+      const merged=new Set([...migrateLegacyKeys(current),...migrateLegacyKeys(legacy)]);
+      localStorage.setItem(COMPLETED_STORAGE_KEY,JSON.stringify([...merged]));
+      LEGACY_COMPLETED_STORAGE_KEYS.forEach(key=>localStorage.removeItem(key));
+      return merged;
+    }catch(error){return new Set()}
+  }
+  function completedLocalSave(values){
+    try{localStorage.setItem(COMPLETED_STORAGE_KEY,JSON.stringify([...values]))}catch(error){}
+  }
+  function completedHistoryLocalRead(){
+    try{const value=JSON.parse(localStorage.getItem(COMPLETED_HISTORY_STORAGE_KEY)||"[]");return Array.isArray(value)?value:[]}
+    catch(error){return[]}
+  }
+  function completedHistoryLocalSave(rows){
+    try{localStorage.setItem(COMPLETED_HISTORY_STORAGE_KEY,JSON.stringify(rows.slice(0,1000)))}catch(error){}
+  }
+  function loginSessionRead(){
+    try{
+      const value=JSON.parse(localStorage.getItem(LOGIN_SESSION_KEY)||"null");
+      return value&&value.loggedIn&&SHIFT_DISPATCH_SHEETS[value.shift]?value:null;
+    }catch(error){return null}
+  }
+  function loginSessionSave(value){
+    try{localStorage.setItem(LOGIN_SESSION_KEY,JSON.stringify({...value,loggedIn:true}))}catch(error){}
+  }
+  function saveRouteProgress(point,label){
+    const saved=loginSessionRead();
+    if(!saved||!Array.isArray(point)||saved.sessionId!==SESSION_ID||
+      String(saved.employee||"")!==empNow()||normalizedClientShift(saved.shift)!==shiftNow())return;
+    loginSessionSave({...saved,startPoint:point.join(","),location:point.map(value=>Number(value).toFixed(5)).join(","),locatedAt:new Date().toISOString(),locationLabel:label||""});
+  }
   function lowBatteryOnly(sourceRoutes){
     return sourceRoutes.filter(route=>String(route.completedNote||"").trim()!=="已完成").map(route=>{
       const vehicles=route.vehicles.filter(vehicle=>
@@ -218,7 +297,7 @@
   }
   function parseCoords(value){
     const parts=String(value||"").split(",").map(Number);
-    return parts.length===2&&parts.every(Number.isFinite)?parts:null;
+    return parts.length===2&&parts.every(Number.isFinite)&&Math.abs(parts[0])<=90&&Math.abs(parts[1])<=180?parts:null;
   }
   function pointForGoogle(value){
     if(Array.isArray(value)&&value.length===2)return `${value[0]},${value[1]}`;
@@ -260,9 +339,10 @@
       host.appendChild(link);
     }
   }
-  function escapeAttr(value){
-    return String(value||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+  function escapeHtml(value){
+    return String(value||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
   }
+  const escapeAttr=escapeHtml;
   function haversine(a,b){
     if(!a||!b)return Number.POSITIVE_INFINITY;
     const rad=x=>x*Math.PI/180,R=6371;
@@ -277,9 +357,34 @@
     const match=dispatchFormRows.find(row=>row.zone===zone&&(row.stationRaw===target||row.stationRaw.replace(/^\d{9}/,"").trim()===target));
     return match?parseCoords(match.coords):null;
   }
-  function buildZoneRoutes(zone,startPoint){
+  function requestDevicePosition(options){
+    return new Promise(resolve=>{
+      if(!navigator.geolocation){resolve({point:null,error:{code:0}});return}
+      navigator.geolocation.getCurrentPosition(position=>resolve({
+        point:[position.coords.latitude,position.coords.longitude],
+        accuracy:Math.round(position.coords.accuracy||0),
+        locatedAt:new Date().toISOString(),error:null
+      }),error=>resolve({point:null,error}),options);
+    });
+  }
+  async function latestDevicePosition(){
+    const precise=await requestDevicePosition({enableHighAccuracy:true,maximumAge:0,timeout:12000});
+    if(precise.point||precise.error&&precise.error.code===1)return precise;
+    return requestDevicePosition({enableHighAccuracy:false,maximumAge:0,timeout:6000});
+  }
+  function buildZoneRoutes(zone,startPoint,hiddenKeys=new Set(),reopenedKeys=new Set()){
+    const selectedRows=dispatchFormRows.map(row=>{
+      const stationCode=(row.stationRaw.match(/^\d{9}/)||[""])[0];
+      const key=completionKey(shiftNow(),activeDispatchSheet,stationCode,row.vehicle);
+      return {row:reopenedKeys.has(key)?{...row,completed:""}:row,key};
+    }).filter(item=>{
+      return item.row.zone===zone&&item.row.completed!=="已完成"&&!hiddenKeys.has(item.key);
+    }).map(item=>({row:item.row,distance:haversine(startPoint,parseCoords(item.row.coords))}))
+      .sort((a,b)=>a.distance-b.distance||a.row.sourceOrder-b.row.sourceOrder||a.row.vehicle.localeCompare(b.row.vehicle,"zh-Hant"))
+      .slice(0,MAX_ASSIGNMENT_ITEMS)
+      .map(item=>item.row);
     const grouped=new Map();
-    dispatchFormRows.filter(row=>row.zone===zone).forEach(row=>{
+    selectedRows.forEach(row=>{
       const code=(row.stationRaw.match(/^\d{9}/)||[""])[0];
       const station=row.stationRaw.replace(/^\d{9}/,"").trim()||row.stationRaw;
       const key=code||station;
@@ -300,15 +405,16 @@
     }
     return ordered;
   }
-  function updateRouteContext(zone,startLabel,startPoint){
+  function updateRouteContext(zone,startLabel,startPoint,sourceRoutes=routes){
     const area=ZONE_INFO[zone]||zone;
     document.getElementById("feedZone").textContent=`同區動態｜${zone} ${area}`;
-    document.getElementById("feedRoute").textContent=routes.length?`${startLabel} → ${routes[0].station}`:"此分區目前無待派工單";
-    document.getElementById("feedDistance").textContent=routes[0]&&routes[0].km||"0.0 km";
-    document.getElementById("mapStationCount").textContent=`近 → 遠 · 共 ${routes.length} 站`;
-    document.getElementById("routeSummary").textContent=routes.length?[startLabel,...routes.map(route=>route.station)].join(" → "):"此分區目前無待派工單";
+    document.getElementById("feedRoute").textContent=sourceRoutes.length?`${startLabel} → ${sourceRoutes[0].station}`:"此分區目前無待派工單";
+    document.getElementById("feedDistance").textContent=sourceRoutes[0]&&sourceRoutes[0].km||"0.0 km";
+    document.getElementById("mapStationCount").textContent=`近 → 遠 · 共 ${sourceRoutes.length} 站`;
+    document.getElementById("routeSummary").textContent=sourceRoutes.length?[startLabel,...sourceRoutes.map(route=>route.station)].join(" → "):"此分區目前無待派工單";
     routeStartPoint=startPoint;
-    routePoints=[startPoint,...routes.map(route=>route.coords).filter(Boolean)].filter(Boolean);
+    routeStartLabel=startLabel;
+    routePoints=[startPoint,...sourceRoutes.map(route=>route.coords).filter(Boolean)].filter(Boolean);
   }
   function renderTasks(){
     updateSummary();
@@ -317,12 +423,12 @@
       <article class="card task-card">
         <div class="task-top">
           <div class="order">${i+1}</div>
-          <div class="station"><h3>${r.station}</h3><p>${r.code} · 第 ${i+1} 站</p></div>
+          <div class="station"><h3>${escapeHtml(r.station)}</h3><p>${escapeHtml(r.code)} · 第 ${i+1} 站</p></div>
           <div class="need"><b>${r.need}</b><span>輛待排除</span></div>
         </div>
-        <div class="travel"><span>🚚 前往 ${r.station}</span><span>${r.mins} · ${r.km}</span></div>
-        <div class="vehicle-list">${r.vehicles.map(v=>`<div class="vehicle"><span class="plate">${v[0]}</span><span class="reason">${v[1]}</span><span class="battery-type">${v[2]}</span><button class="single-report" data-code="${r.code}" data-station="${r.station}" data-bike="${v[0]}" data-reason="${String(v[1]||"").replace(/"/g,"&quot;")}" data-dock="${v[4]||""}" data-source="${v[5]||""}">單台回報</button></div>`).join("")}</div>
-        <div class="task-actions"><a href="${escapeAttr(buildGoogleRouteUrl([r],null))}" target="_blank" rel="noopener noreferrer">Google 直達導航</a><button class="done" data-work-order-id="${r.id}">完成此站</button></div>
+        <div class="travel"><span>🚚 前往 ${escapeHtml(r.station)}</span><span>${escapeHtml(r.mins)} · ${escapeHtml(r.km)}</span></div>
+        <div class="vehicle-list">${r.vehicles.map(v=>`<div class="vehicle"><span class="plate">${escapeHtml(v[0])}</span><span class="reason">${escapeHtml(v[1])}</span><span class="battery-type">${escapeHtml(v[2])}</span><button class="single-report" data-code="${escapeAttr(r.code)}" data-station="${escapeAttr(r.station)}" data-bike="${escapeAttr(v[0])}" data-reason="${escapeAttr(v[1])}" data-dock="${escapeAttr(v[4])}" data-source="${escapeAttr(v[5])}">單台回報</button></div>`).join("")}</div>
+        <div class="task-actions"><a href="${escapeAttr(buildGoogleRouteUrl([r],null))}" target="_blank" rel="noopener noreferrer">Google 直達導航</a><button class="done" data-work-order-id="${escapeAttr(r.id)}">完成此站</button></div>
       </article>`).join("");
     document.querySelectorAll("[data-work-order-id]").forEach(btn=>btn.addEventListener("click",()=>completeWorkOrder(btn.dataset.workOrderId,btn)));
     document.querySelectorAll(".single-report").forEach(btn=>btn.addEventListener("click",()=>reportSingleVehicle(btn.dataset.code,btn.dataset.station,btn.dataset.bike,btn.dataset.reason,btn,btn.dataset.dock,btn.dataset.source)));
@@ -338,11 +444,11 @@
     return m?m[1]+"%":"";
   }
 
-  function fetchSheetData(url,prefix){
+  function fetchSheetData(url,prefix,timeoutMs=10000){
     return new Promise((resolve,reject)=>{
       const callback=`${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const script=document.createElement("script");
-      const timer=setTimeout(()=>finish(new Error("sheet timeout")),10000);
+      const timer=setTimeout(()=>finish(new Error("sheet timeout")),timeoutMs);
       function finish(error,data){
         clearTimeout(timer);delete window[callback];script.remove();
         error?reject(error):resolve(data);
@@ -358,33 +464,84 @@
     const cell=index>=0&&row.c&&row.c[index];
     return cell==null||cell.v==null?"":String(cell.f??cell.v).trim();
   };
+  function dispatchSheetUrl(sheetName){
+    const url=new URL(DISPATCH_SHEET_BASE_URL);
+    url.searchParams.set("headers","3");
+    url.searchParams.set("sheet",sheetName);
+    return url.toString();
+  }
+  function parseDispatchSheetData(data){
+    if(!data||data.status==="error"||!data.table){
+      const details=(data&&Array.isArray(data.errors)?data.errors:[]).map(item=>
+        [item&&item.reason,item&&item.message,item&&item.detailed_message].filter(Boolean).join(" ")
+      ).join(" ");
+      const error=new Error(details||"dispatch sheet unavailable");
+      error.dispatchSheetMissing=/(?:sheet|worksheet|tab|工作表|分頁).*(?:not found|does not exist|unknown|找不到|不存在)/i.test(details);
+      throw error;
+    }
+    const labels=(data.table.cols||[]).map(col=>String(col.label||"").trim());
+    const indexes={
+      vehicle:labels.indexOf("車號"),station:labels.indexOf("鎖車場站"),
+      reason:labels.indexOf("維修通報原因"),coords:labels.indexOf("座標"),
+      zone:labels.indexOf("區域代號"),completed:labels.indexOf("完成註記"),
+      dock:pickCol(labels,["柱號","主柱號","鎖柱號","主鎖柱號","柱位"]),
+      source:pickCol(labels,["來源"]),
+      district:pickCol(labels,["分區"])
+    };
+    if(indexes.vehicle<0||indexes.station<0||indexes.reason<0||indexes.coords<0||indexes.zone<0||indexes.completed<0){
+      throw new Error("dispatch columns missing");
+    }
+    const rows=(data.table.rows||[]).map((row,sourceOrder)=>({
+      sourceOrder,
+      vehicle:cellValue(row,indexes.vehicle),
+      stationRaw:cellValue(row,indexes.station),
+      reason:cellValue(row,indexes.reason),
+      coords:cellValue(row,indexes.coords),
+      zone:cellValue(row,indexes.zone),
+      completed:indexes.completed>=0?cellValue(row,indexes.completed):"",
+      dock:indexes.dock>=0?cellValue(row,indexes.dock):"",
+      source:indexes.source>=0?cellValue(row,indexes.source):"",
+      district:indexes.district>=0?cellValue(row,indexes.district):""
+    })).filter(row=>row.vehicle&&row.stationRaw&&row.zone&&row.reason.includes(DISPATCH_KEYWORD));
+    if(rows.some(row=>!/^\d{9}/.test(row.stationRaw)))throw new Error("dispatch station code invalid");
+    if(rows.some(row=>!parseCoords(row.coords)))throw new Error("dispatch coordinates invalid");
+    const seen=new Set();
+    return rows.filter(row=>{
+      const key=`${row.zone}|${row.stationRaw}|${row.vehicle}`;
+      if(seen.has(key))return false;
+      seen.add(key);return true;
+    });
+  }
   async function loadDispatchFormData(){
+    const sequence=++dispatchLoadSequence;
+    const shift=document.getElementById("shift").value;
+    const candidates=SHIFT_DISPATCH_SHEETS[shift]||[];
     const zoneSelect=document.getElementById("zone");
+    const startButton=document.getElementById("startBtn");
+    const formError=document.getElementById("formError");
+    zoneSelect.disabled=true;
+    startButton.disabled=true;
+    formError.textContent="";
     try{
-      const data=await fetchSheetData(DISPATCH_SHEET_URL,"dispatchSheet");
-      const labels=(data.table.cols||[]).map(col=>String(col.label||"").trim());
-      const indexes={
-        vehicle:labels.indexOf("車號"),station:labels.indexOf("鎖車場站"),
-        reason:labels.indexOf("維修通報原因"),coords:labels.indexOf("座標"),
-        zone:labels.indexOf("區域代號"),completed:labels.indexOf("完成註記"),
-        dock:pickCol(labels,["柱號","主柱號","鎖柱號","主鎖柱號","柱位"]),
-        source:pickCol(labels,["來源"]),
-        district:pickCol(labels,["分區"])
-      };
-      if(indexes.station<0||indexes.reason<0||indexes.zone<0)throw new Error("dispatch columns missing");
-      dispatchFormRows=(data.table.rows||[]).map(row=>({
-        vehicle:cellValue(row,indexes.vehicle),
-        stationRaw:cellValue(row,indexes.station),
-        reason:cellValue(row,indexes.reason),
-        coords:cellValue(row,indexes.coords),
-        zone:cellValue(row,indexes.zone),
-        completed:indexes.completed>=0?cellValue(row,indexes.completed):"",
-        dock:indexes.dock>=0?cellValue(row,indexes.dock):"",
-        source:indexes.source>=0?cellValue(row,indexes.source):"",
-        district:indexes.district>=0?cellValue(row,indexes.district):""
-      })).filter(row=>row.zone&&row.reason.includes(DISPATCH_KEYWORD)&&row.completed!=="已完成");
+      const results=await Promise.allSettled(candidates.map(async sheetName=>({
+        sheetName,
+        rows:parseDispatchSheetData(await fetchSheetData(dispatchSheetUrl(sheetName),"dispatchSheet",6000))
+      })));
+      const readable=results.filter(result=>result.status==="fulfilled").map(result=>result.value);
+      // 候選名稱只用於相容舊分頁；一旦找到優先序最高的可讀分頁，即使今天為空也不跨表撈資料。
+      const selected=readable[0]||null;
+      if(!selected)throw new Error("dispatch sheet unavailable");
+      if(sequence!==dispatchLoadSequence)return false;
+      // 先在區域變數完成抓取與驗證，再一次換入，避免同步期間任務帶到空白或錯班來源。
+      activeDispatchSheet=selected.sheetName;
+      activeDispatchShift=shift;
+      dispatchFormRows=selected.rows;
+      const availableRows=dispatchFormRows.filter(row=>row.completed!=="已完成");
+      if(!availableRows.length){
+        formError.textContent=`${shift}班目前沒有低電量待派工單`;
+      }
       const counts={};
-      dispatchFormRows.forEach(row=>counts[row.zone]=(counts[row.zone]||0)+1);
+      availableRows.forEach(row=>counts[row.zone]=(counts[row.zone]||0)+1);
       zoneSelect.innerHTML='<option value="">— 請選責任分區 —</option>';
       ZONE_ORDER.forEach(zone=>{
         const option=document.createElement("option");
@@ -392,14 +549,19 @@
         option.textContent=`${zone}｜${ZONE_INFO[zone]||zone}（${counts[zone]||0} 台）`;
         zoneSelect.appendChild(option);
       });
-      [...new Set(dispatchFormRows.map(row=>row.zone))].filter(zone=>!ZONE_ORDER.includes(zone)).sort().forEach(zone=>{
+      [...new Set(availableRows.map(row=>row.zone))].filter(zone=>!ZONE_ORDER.includes(zone)).sort().forEach(zone=>{
         const option=document.createElement("option");
         option.value=zone;option.textContent=`${zone}（${counts[zone]||0} 台）`;zoneSelect.appendChild(option);
       });
+      zoneSelect.disabled=false;
+      startButton.disabled=false;
       buildStationList();
+      return true;
     }catch(error){
-      zoneSelect.innerHTML='<option value="">派工總表讀取失敗，請重新整理</option>';
+      if(sequence!==dispatchLoadSequence)return false;
       zoneSelect.disabled=true;
+      formError.textContent=`找不到可讀取的${shift}班派工總表，請切換班別重試`;
+      return false;
     }
   }
   function buildStationList(){
@@ -415,44 +577,223 @@
       const option=document.createElement("option");option.value=station;list.appendChild(option);
     });
   }
+  function normalizedClientShift(value){
+    const shift=String(value||"").trim();
+    if(shift==="晚"||shift==="晚班")return "晚";
+    if(shift==="夜"||shift==="夜班"||shift==="大夜班")return "夜";
+    return "早";
+  }
+  function completedHistoryIdentity(item){
+    return [item.recordId,item.shift,item.dispatchSheet,item.stationCode,item.vehicleId].map(value=>String(value||"").trim()).join("|");
+  }
+  function completedWorkKey(item){
+    return completionKey(item.shift,item.dispatchSheet,item.stationCode,item.vehicleId);
+  }
+  function historyRowsFromQueue(queue){
+    return (Array.isArray(queue)?queue:[]).filter(payload=>payload&&(payload.op==="completeShiftWO"||payload.op==="completeWO"))
+      .flatMap(payload=>(payload.vehicles||[]).map(vehicle=>({
+        recordId:String(payload.recordId||payload.id||""),workOrderId:String(payload.id||""),
+        employee:String(payload.employee||""),shift:normalizedClientShift(payload.shift),
+        dispatchSheet:String(payload.dispatchSheet||"派工總表"),stationCode:String(payload.stationCode||""),
+        station:String(payload.station||""),vehicleId:String(vehicle&&vehicle.id||""),
+        reason:String(vehicle&&vehicle.reason||""),completedAt:String(payload.completedAt||""),syncState:"待同步"
+      })));
+  }
+  function undoRowsFromQueue(queue){
+    return (Array.isArray(queue)?queue:[]).filter(payload=>payload&&payload.op==="undoShiftWO")
+      .flatMap(payload=>(payload.targets||[]).map(target=>({
+        recordId:String(target&&target.completionRecordId||""),shift:normalizedClientShift(payload.shift),
+        dispatchSheet:String(payload.dispatchSheet||""),stationCode:String(payload.stationCode||""),
+        vehicleId:String(target&&target.vehicleId||"")
+      })));
+  }
+  function completedTimestamp(value){
+    let text=String(value||"").trim();
+    if(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(text))text=text.replace(" ","T")+"+08:00";
+    const parsed=Date.parse(text);
+    return Number.isFinite(parsed)?parsed:0;
+  }
+  function sortCompletedHistory(rows){
+    return rows.sort((a,b)=>completedTimestamp(b.completedAt)-completedTimestamp(a.completedAt)||completedHistoryIdentity(b).localeCompare(completedHistoryIdentity(a)));
+  }
+  function applyCompletionOperations(baseKeys,baseRows,operations,employee,shift){
+    const keys=new Set(baseKeys);
+    const history=new Map();
+    baseRows.forEach(item=>{
+      if(item&&String(item.employee||"")===employee&&normalizedClientShift(item.shift)===shift)history.set(completedHistoryIdentity(item),item);
+    });
+    const removeWorkKey=workKey=>{
+      [...history].forEach(([identity,item])=>{if(completedWorkKey(item)===workKey)history.delete(identity)});
+    };
+    operations.forEach(operation=>{
+      const payload=operation&&operation.payload||operation;
+      const syncState=operation&&operation.syncState||"待同步";
+      const applyUndo=!(operation&&operation.applyUndo===false);
+      if(!payload)return;
+      if(payload.op==="completeShiftWO"||payload.op==="completeWO"){
+        historyRowsFromQueue([payload]).forEach(item=>{
+          const workKey=completedWorkKey(item);
+          keys.add(workKey);
+          if(item.employee===employee&&item.shift===shift){
+            removeWorkKey(workKey);
+            history.set(completedHistoryIdentity(item),{...item,syncState});
+          }
+        });
+      }else if(payload.op==="undoShiftWO"){
+        undoRowsFromQueue([payload]).forEach(item=>{
+          const workKey=completedWorkKey(item);
+          if(!applyUndo){
+            [...history].forEach(([identity,row])=>{
+              if(completedWorkKey(row)===workKey)history.set(identity,{...row,syncState:"還原待同步"});
+            });
+            return;
+          }
+          keys.delete(workKey);
+          if(item.shift===shift)removeWorkKey(workKey);
+        });
+      }
+    });
+    return{keys,rows:sortCompletedHistory([...history.values()])};
+  }
+  function saveCompletedHistoryScope(rows,employee,shift){
+    const other=completedHistoryLocalRead().filter(item=>String(item.employee||"")!==employee||normalizedClientShift(item.shift)!==shift);
+    completedHistoryLocalSave(sortCompletedHistory([...rows,...other]));
+  }
+  function addCompletedHistoryFromPayload(payload,syncState){
+    const employee=String(payload.employee||"");
+    const shift=normalizedClientShift(payload.shift);
+    const currentScope=employee===empNow()&&shift===shiftNow();
+    const baseRows=currentScope?completedTaskRows:completedHistoryLocalRead().filter(item=>String(item.employee||"")===employee&&normalizedClientShift(item.shift)===shift);
+    const state=applyCompletionOperations(completedLocalRead(),baseRows,[{payload,syncState}],employee,shift);
+    completedLocalSave(state.keys);
+    saveCompletedHistoryScope(state.rows,employee,shift);
+    if(currentScope){completedTaskRows=state.rows;renderCompletedTasks()}
+  }
+  function removeCompletedHistoryItem(item){
+    const employee=String(item.employee||"");
+    const shift=normalizedClientShift(item.shift);
+    const identity=completedHistoryIdentity(item);
+    const scopeRows=completedHistoryLocalRead().filter(row=>String(row.employee||"")===employee&&normalizedClientShift(row.shift)===shift&&completedHistoryIdentity(row)!==identity);
+    saveCompletedHistoryScope(scopeRows,employee,shift);
+    if(employee===empNow()&&shift===shiftNow()){
+      completedTaskRows=completedTaskRows.filter(row=>completedHistoryIdentity(row)!==identity);
+      renderCompletedTasks();
+    }
+  }
+  function payloadContextIsCurrent(payload,sessionId){
+    return SESSION_ID===sessionId&&String(payload.employee||"")===empNow()&&normalizedClientShift(payload.shift)===shiftNow()&&String(payload.dispatchSheet||"")===activeDispatchSheet;
+  }
+  function userContextIsCurrent(sessionId,employee,shift){
+    return SESSION_ID===sessionId&&String(employee||"")===empNow()&&normalizedClientShift(shift)===shiftNow();
+  }
+  function renderCompletedTasks(){
+    const host=document.getElementById("completedTasks");
+    const query=document.getElementById("completedSearch").value.trim().toLowerCase();
+    const shown=completedTaskRows.filter(item=>[
+      item.stationCode,item.station,item.vehicleId,item.reason,item.completedAt,item.shift
+    ].some(value=>String(value||"").toLowerCase().includes(query)));
+    if(!shown.length){host.innerHTML='<div class="completed-empty">尚無符合的完成紀錄</div>';return}
+    host.innerHTML=shown.map((item,index)=>`
+      <div class="completed-item">
+        <b>${escapeHtml(item.station||item.stationCode)} · ${escapeHtml(item.vehicleId)}</b>
+        <p>${escapeHtml(item.reason||"低電量禁用")}｜${escapeHtml(item.completedAt||"")}｜${escapeHtml(item.syncState||"已同步")}</p>
+        <button type="button" data-undo-completed="${index}" ${item.syncState!=="已同步"?"disabled":""}>${item.syncState==="還原待同步"?"還原待同步":item.syncState==="已同步"?"改為未完成":"等待同步"}</button>
+      </div>`).join("");
+    document.querySelectorAll("[data-undo-completed]").forEach(button=>button.addEventListener("click",()=>undoCompletedTask(shown[Number(button.dataset.undoCompleted)],button)));
+  }
   async function loadCompletedRecords(){
-    const localDone=JSON.parse(localStorage.getItem("maint_completed_vehicles_v2")||"[]");
-    let completedKeys=new Set(localDone);
+    const sequence=++completedLoadSequence;
+    const selectedMutationVersion=completionMutationVersion;
+    const selectedShift=shiftNow();
+    const selectedEmployee=empNow();
+    const selectedSession=SESSION_ID;
+    const contextIsCurrent=()=>sequence===completedLoadSequence&&selectedMutationVersion===completionMutationVersion&&
+      completionMutationsInFlight===0&&selectedShift===shiftNow()&&selectedEmployee===empNow()&&selectedSession===SESSION_ID;
+    let serverKeys=completedLocalRead();
+    let serverHistory=completedHistoryLocalRead().filter(item=>String(item.employee||"")===selectedEmployee&&normalizedClientShift(item.shift)===selectedShift);
+    let sheetLoaded=false;
     try{
       const data=await fetchCompletionSheet();
+      if(!contextIsCurrent())return;
       const labels=(data.table.cols||[]).map(col=>String(col.label||"").trim());
       const stationIndex=labels.indexOf("場站代碼");
       const vehicleIndex=labels.indexOf("自行車號");
+      const shiftIndex=labels.indexOf("班別");
+      const employeeIndex=labels.indexOf("員工編號");
+      const stationNameIndex=labels.indexOf("場站名稱");
+      const reasonIndex=labels.indexOf("維修原因");
+      const completedAtIndex=labels.indexOf("完成時間");
+      const recordIndex=labels.indexOf("紀錄ID");
+      const workOrderIndex=labels.indexOf("工單編號");
+      const dispatchSheetIndex=labels.indexOf("派工總表");
       if(stationIndex<0||vehicleIndex<0)throw new Error("completion columns missing");
-      const sheetKeys=new Set();
+      serverKeys=new Set();
+      serverHistory=[];
       (data.table.rows||[]).forEach(row=>{
         const cells=row.c||[];
-        const station=cells[stationIndex]&&(cells[stationIndex].f??cells[stationIndex].v);
-        const vehicle=cells[vehicleIndex]&&(cells[vehicleIndex].f??cells[vehicleIndex].v);
-        if(station&&vehicle)sheetKeys.add(completionKey(station,vehicle));
+        const value=index=>index>=0&&cells[index]?String(cells[index].f??cells[index].v??"").trim():"";
+        const station=value(stationIndex),vehicle=value(vehicleIndex);
+        const rowShift=normalizedClientShift(value(shiftIndex));
+        const rowDispatchSheet=value(dispatchSheetIndex)||defaultDispatchSheetForShift(rowShift);
+        if(station&&vehicle)serverKeys.add(completionKey(rowShift,rowDispatchSheet,station,vehicle));
+        if(station&&vehicle&&value(employeeIndex)===selectedEmployee&&rowShift===selectedShift){
+          const dispatchSheet=rowDispatchSheet;
+          serverHistory.push({
+            recordId:value(recordIndex),workOrderId:value(workOrderIndex)||`LOWBAT-${SHIFT_WORK_ORDER_KEY[rowShift]}-${station}`,
+            employee:value(employeeIndex),shift:rowShift,dispatchSheet,stationCode:station,
+            station:value(stationNameIndex),vehicleId:vehicle,reason:value(reasonIndex),
+            completedAt:value(completedAtIndex),syncState:"已同步"
+          });
+        }
       });
-      sheetKeys.forEach(k=>completedKeys.add(k));
-      localStorage.setItem("maint_completed_vehicles_v2",JSON.stringify([...completedKeys]));
-      pendingHideDrop([...sheetKeys]);      // 表單已確認 → 解除暫時隱藏
-      reconcileQueue(completedKeys);
+      sheetLoaded=true;
+      await reconcileQueue(serverKeys);
+      if(!contextIsCurrent())return;
+      pendingHideDrop([...serverKeys]);
     }catch(error){
+      if(!contextIsCurrent())return;
       document.getElementById("dedupeStatus").textContent="離線比對完成紀錄";
     }
-    await flushQueue();
+    if(!contextIsCurrent())return;
+    const outcomes=await flushQueue();
+    if(!contextIsCurrent())return;
+    const successfulOutcomes=outcomes.filter(outcome=>outcome.result==="ok");
+    const confirmed=successfulOutcomes.map(outcome=>({
+      payload:historyPayloadAfterSync(outcome.payload,outcome.result,outcome.response),syncState:"已同步"
+    })).filter(operation=>operation.payload.op==="undoShiftWO"||(operation.payload.vehicles||[]).length);
+    let state=applyCompletionOperations(serverKeys,serverHistory,confirmed,selectedEmployee,selectedShift);
+    // 他人搶先完成的車不列入本人歷史，但仍是已完成，不可重新派出。
+    successfulOutcomes.filter(outcome=>outcome.payload&&(outcome.payload.op==="completeShiftWO"||outcome.payload.op==="completeWO"))
+      .forEach(outcome=>payloadWorkKeys(outcome.payload).forEach(key=>state.keys.add(key)));
+    const pendingOperations=queueRead().map(payload=>({payload,syncState:"待同步",applyUndo:false}));
+    state=applyCompletionOperations(state.keys,state.rows,pendingOperations,selectedEmployee,selectedShift);
+    const finalIntent=new Map();
+    confirmed.forEach(operation=>{
+      const payload=operation.payload;
+      if(payload.op==="undoShiftWO")undoRowsFromQueue([payload]).forEach(item=>finalIntent.set(completedWorkKey(item),"undo"));
+    });
+    const reopenedKeys=new Set([...finalIntent].filter(([,intent])=>intent==="undo").map(([key])=>key));
+    reopenedKeys.forEach(key=>pendingHideDrop([key]));
+    completedLocalSave(state.keys);
+    completedTaskRows=state.rows;
+    saveCompletedHistoryScope(completedTaskRows,selectedEmployee,selectedShift);
     updateSyncBadge();
-    const hideKeys=new Set([...completedKeys,...pendingHideRead()]);
-    visibleRoutes=lowBatteryOnly(routes).map(route=>{
-      const vehicles=route.vehicles.filter(vehicle=>!hideKeys.has(completionKey(route.code,vehicle[0])));
-      return {...route,vehicles,need:vehicles.length};
-    }).filter(route=>route.vehicles.length>0);
+    const hideKeys=new Set([...state.keys,...pendingHideRead()]);
+    routes=buildZoneRoutes(zoneNow(),routeStartPoint,hideKeys,reopenedKeys);
+    visibleRoutes=lowBatteryOnly(routes);
+    updateRouteContext(zoneNow(),routeStartLabel||document.getElementById("location").value,routeStartPoint,visibleRoutes);
     renderTasks();
+    renderCompletedTasks();
+    if(sheetLoaded)document.getElementById("dedupeStatus").textContent=queueCount()?document.getElementById("dedupeStatus").textContent:"✓ 已同步";
   }
   /* ═══ 同步佇列:送不出去就排隊,下次進來自動補送 ═══ */
   /* 班次紀錄ID:一次派工共用一組(對應表上的「紀錄ID」欄) */
   let SESSION_ID="";
+  let UI_CONTEXT_VERSION=0;
   const empNow=()=>document.getElementById("profileName").textContent.trim();
   const truckNow=()=>document.getElementById("vehicle").value.trim();
   const zoneNow=()=>document.getElementById("zone").value;
+  const shiftNow=()=>document.getElementById("shift").value;
 
   function taipeiIsoTimestamp(date=new Date()){
     const parts=Object.fromEntries(new Intl.DateTimeFormat("en-CA",{
@@ -462,71 +803,140 @@
     const milliseconds=String(date.getMilliseconds()).padStart(3,"0");
     return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}.${milliseconds}+08:00`;
   }
+  function completionEventId(){
+    const token=globalThis.crypto&&typeof globalThis.crypto.randomUUID==="function"
+      ?globalThis.crypto.randomUUID()
+      :`${Date.now()}-${Math.random().toString(36).slice(2,12)}`;
+    return `${empNow()}-${shiftNow()}-${token}`.slice(0,200);
+  }
 
   function buildPayload(way,recordId,code,station,vehicles){
     return{
-      op:"completeWO",
-      id:`LOWBAT-${code}`,          // 舊後端仍以此維護待派清單
+      op:"completeShiftWO",
+      id:`LOWBAT-${SHIFT_WORK_ORDER_KEY[shiftNow()]||"EARLY"}-${code}`,
       recordId,                      // → 紀錄ID
       completedAt:taipeiIsoTimestamp(),
       employee:empNow(),
       vehicle:truckNow(),            // → 維修完成紀錄的車號/車牌
       truck:truckNow(),              // → 車號/車牌
       zone:zoneNow(),
+      shift:shiftNow(),
+      dispatchSheet:activeDispatchSheet,
       way,                           // → 回報方式
       stationCode:code,
       station,
       vehicles,                      // [{id,reason}] → 自行車號 / 維修原因
       vehicleIds:vehicles.map(v=>v.id),
-      qid:`${recordId}|${code}|${vehicles.map(v=>v.id).join(",")}`
+      qid:`${recordId}|${shiftNow()}|${code}|${vehicles.map(v=>v.id).join(",")}`
     };
   }
 
   /* 待同步但畫面先隱藏:避免同仁被要求重做已修好的車 */
-  const PENDING_HIDE_KEY="maint_pending_hidden_v1";
-  function pendingHideRead(){try{return new Set(JSON.parse(localStorage.getItem(PENDING_HIDE_KEY)||"[]"))}catch(e){return new Set()}}
+  const PENDING_HIDE_KEY="maint_pending_hidden_v3";
+  const LEGACY_PENDING_HIDE_KEYS=["maint_pending_hidden_v2","maint_pending_hidden_v1"];
+  function pendingHideRead(){
+    try{
+      const current=JSON.parse(localStorage.getItem(PENDING_HIDE_KEY)||"[]");
+      const legacy=LEGACY_PENDING_HIDE_KEYS.flatMap(key=>JSON.parse(localStorage.getItem(key)||"[]"));
+      const merged=new Set([...migrateLegacyKeys(current),...migrateLegacyKeys(legacy)]);
+      localStorage.setItem(PENDING_HIDE_KEY,JSON.stringify([...merged]));
+      LEGACY_PENDING_HIDE_KEYS.forEach(key=>localStorage.removeItem(key));
+      return merged;
+    }catch(error){return new Set()}
+  }
   function pendingHideSave(s){try{localStorage.setItem(PENDING_HIDE_KEY,JSON.stringify([...s]))}catch(e){}}
   function pendingHideAdd(keys){const s=pendingHideRead();keys.forEach(k=>s.add(k));pendingHideSave(s)}
   function pendingHideDrop(keys){const s=pendingHideRead();keys.forEach(k=>s.delete(k));pendingHideSave(s)}
 
-  const SYNC_QUEUE_KEY="maint_sync_queue_v1";
-  function queueRead(){try{return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY)||"[]")}catch(e){return[]}}
-  function queueWrite(q){try{localStorage.setItem(SYNC_QUEUE_KEY,JSON.stringify(q))}catch(e){}}
-  function queueAdd(p){const q=queueRead();if(!q.some(x=>x.qid===p.qid)){q.push(p);queueWrite(q)}}
-  function queueDrop(qid){queueWrite(queueRead().filter(x=>x.qid!==qid))}
+  const LEGACY_SYNC_QUEUE_KEY="maint_sync_queue_v1";
+  const SYNC_QUEUE_PREFIX="maint_sync_item_v2:";
+  const queueStorageKey=qid=>`${SYNC_QUEUE_PREFIX}${encodeURIComponent(String(qid||""))}`;
+  function migrateLegacyQueue(){
+    try{
+      const legacy=JSON.parse(localStorage.getItem(LEGACY_SYNC_QUEUE_KEY)||"[]");
+      (Array.isArray(legacy)?legacy:[]).forEach((payload,index)=>{
+        if(!payload||!payload.qid)return;
+        const key=queueStorageKey(payload.qid);
+        if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify({...payload,queuedAt:payload.queuedAt||Date.now()+index}));
+      });
+      localStorage.removeItem(LEGACY_SYNC_QUEUE_KEY);
+    }catch(error){}
+  }
+  function queueRead(){
+    migrateLegacyQueue();
+    const rows=[];
+    try{
+      for(let index=0;index<localStorage.length;index++){
+        const key=localStorage.key(index);
+        if(!key||!key.startsWith(SYNC_QUEUE_PREFIX))continue;
+        try{const payload=JSON.parse(localStorage.getItem(key)||"null");if(payload&&payload.qid)rows.push(payload)}catch(error){}
+      }
+    }catch(error){}
+    return rows.sort((a,b)=>Number(a.queuedAt||0)-Number(b.queuedAt||0)||String(a.qid).localeCompare(String(b.qid)));
+  }
+  function queuePut(payload){
+    if(!payload||!payload.qid)return;
+    try{localStorage.setItem(queueStorageKey(payload.qid),JSON.stringify(payload))}catch(error){}
+  }
+  function queueAdd(payload){
+    if(!payload||!payload.qid)return;
+    try{
+      const key=queueStorageKey(payload.qid);
+      if(!localStorage.getItem(key))queuePut({...payload,queuedAt:payload.queuedAt||Date.now()});
+    }catch(error){}
+  }
+  function queueDrop(qid){try{localStorage.removeItem(queueStorageKey(qid))}catch(error){}}
   function queueCount(){return queueRead().length}
 
-  /* 送一筆:先正常 POST(可讀回應確認);被 CORS 擋就改 no-cors 再送一次
-     no-cors 仍會確實送達 GAS 並寫入表單,只是讀不到回應 → 標記為待對帳 */
+  /* 送一筆：只有真正的網路/CORS 例外才用 no-cors；後端明確拒絕不可假裝成功。 */
   let LAST_SYNC="(尚未送出)";
+  let syncInFlight=null;
+  const syncResponseByQid=new Map();
+  const DEBUG_SYNC=false;
+  async function fetchWithTimeout(options,timeoutMs=15000){
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),timeoutMs);
+    try{return await fetch(SYNC_URL,{...options,signal:controller.signal})}
+    finally{clearTimeout(timer)}
+  }
   async function sendOne(payload){
+    let response,text="";
+    syncResponseByQid.delete(payload&&payload.qid);
     try{
-      const r=await fetch(SYNC_URL,{method:"POST",
+      response=await fetchWithTimeout({method:"POST",
         headers:{"Content-Type":"text/plain;charset=utf-8"},
         body:JSON.stringify(payload)});
-      const t=await r.text();
-      LAST_SYNC=`HTTP ${r.status} ｜ ${t.slice(0,600)}`;
-      showDebug();
-      let j=null;try{j=JSON.parse(t)}catch(e){}
-      if(j&&j.ok===true)return"ok";
-      throw new Error(j&&j.error?j.error:"rejected");
-    }catch(e){
-      LAST_SYNC=(LAST_SYNC==="(尚未送出)"||LAST_SYNC.startsWith("送出失敗"))
-        ? `送出失敗:${e.message||e}` : LAST_SYNC;
-      showDebug();
+      text=await response.text();
+    }catch(transportError){
+      LAST_SYNC=`網路送出失敗：${transportError.message||transportError}`;
+      if(DEBUG_SYNC)showDebug();
       try{
-        await fetch(SYNC_URL,{method:"POST",mode:"no-cors",
+        await fetchWithTimeout({method:"POST",mode:"no-cors",
           headers:{"Content-Type":"text/plain;charset=utf-8"},
-          body:JSON.stringify(payload)});
-        LAST_SYNC+=" ｜ 已改用 no-cors 重送(讀不到回應)";
-        showDebug();
+          body:JSON.stringify(payload)},10000);
+        LAST_SYNC+="｜已改用背景送出，等待表單對帳";
+        if(DEBUG_SYNC)showDebug();
         return"sent";
       }catch(e2){
-        LAST_SYNC+=` ｜ no-cors 也失敗:${e2.message||e2}`;
-        showDebug();
+        LAST_SYNC+=`｜背景送出也失敗：${e2.message||e2}`;
+        if(DEBUG_SYNC)showDebug();
         return"fail";
       }
     }
+    LAST_SYNC=`HTTP ${response.status} ｜ ${text.slice(0,600)}`;
+    if(DEBUG_SYNC)showDebug();
+    let parsed=null;try{parsed=JSON.parse(text)}catch(error){}
+    if(response.ok&&parsed&&parsed.ok===true){
+      if(payload&&payload.qid){
+        syncResponseByQid.set(payload.qid,parsed);
+        if(syncResponseByQid.size>50)syncResponseByQid.delete(syncResponseByQid.keys().next().value);
+      }
+      return"ok";
+    }
+    LAST_SYNC=`後端拒絕：${parsed&&parsed.error||`HTTP ${response.status}`}`;
+    if(DEBUG_SYNC)showDebug();
+    if(parsed&&parsed.retryable===true||response.status>=500)return"fail";
+    return"rejected";
   }
   /* 把伺服器原始回應顯示在畫面上,方便現場排查 */
   function showDebug(){
@@ -549,21 +959,169 @@
   }
 
   /* 補送整個佇列(確認成功才移除;GAS 以工單編號去重,重送安全) */
+  function payloadWorkKeys(payload){
+    if(!payload)return[];
+    if(payload.op==="completeShiftWO"||payload.op==="completeWO"){
+      return (payload.vehicleIds||[]).map(vehicleId=>completionKey(payload.shift||"早",payload.dispatchSheet,payload.stationCode||"",vehicleId));
+    }
+    if(payload.op==="undoShiftWO"){
+      return (payload.targets||[]).map(target=>completionKey(payload.shift||"早",payload.dispatchSheet,payload.stationCode||"",target&&target.vehicleId||""));
+    }
+    return[];
+  }
+  const workKeysOverlap=(left,right)=>{const keys=new Set(left);return right.some(key=>keys.has(key))};
   async function flushQueue(){
-    const q=queueRead();if(!q.length)return 0;
-    let ok=0;
-    for(const p of q){const r=await sendOne(p);if(r==="ok"){queueDrop(p.qid);ok++}}
-    updateSyncBadge();return ok;
+    if(syncInFlight)return syncInFlight;
+    const task=(async()=>{
+      const q=queueRead();
+      const outcomes=[];
+      const blockedWorkKeys=new Set();
+      for(const queuedPayload of q){
+        // 前一筆 undo 可能已取消或縮減後面的 completion；送出前再次讀目前 queue。
+        const payload=queueRead().find(item=>item&&item.qid===queuedPayload.qid);
+        if(!payload)continue;
+        const workKeys=payloadWorkKeys(payload);
+        if(workKeys.some(key=>blockedWorkKeys.has(key)))continue;
+        const result=await sendOne(payload);
+        if(result==="ok"||result==="rejected")queueDrop(payload.qid);
+        if(result==="ok"&&payload.op==="undoShiftWO"){
+          const workKeys=(payload.targets||[]).map(target=>completionKey(payload.shift||"早",payload.dispatchSheet,payload.stationCode||"",target&&target.vehicleId||""));
+          cancelQueuedCompletions(workKeys,(payload.targets||[]).map(target=>target&&target.completionRecordId||""));
+        }
+        outcomes.push({payload,result,response:syncResponseByQid.get(payload.qid)||null});
+        // 只封鎖同一工單的後續意圖；其他班別／車輛仍可獨立同步。
+        if(result==="fail"||result==="sent")workKeys.forEach(key=>blockedWorkKeys.add(key));
+      }
+      updateSyncBadge();
+      return outcomes;
+    })();
+    syncInFlight=task;
+    try{return await task}finally{if(syncInFlight===task)syncInFlight=null}
+  }
+  async function flushQueuedPayload(qid){
+    let outcomes=await flushQueue();
+    let outcome=outcomes.find(item=>item.payload&&item.payload.qid===qid);
+    if(!outcome&&queueRead().some(item=>item&&item.qid===qid)){
+      const target=queueRead().find(item=>item&&item.qid===qid);
+      const targetKeys=payloadWorkKeys(target);
+      const blocked=outcomes.some(item=>(item.result==="fail"||item.result==="sent")&&workKeysOverlap(payloadWorkKeys(item.payload),targetKeys));
+      if(blocked)return"fail";
+      outcomes=await flushQueue();
+      outcome=outcomes.find(item=>item.payload&&item.payload.qid===qid);
+      if(!outcome&&queueRead().some(item=>item&&item.qid===qid))return"fail";
+    }
+    return outcome?outcome.result:"cancelled";
   }
 
-  /* 與表單對帳:已出現在「維修完成紀錄」的就從佇列移除 */
-  function reconcileQueue(completedKeys){
-    const q=queueRead();
-    const keep=q.filter(p=>{
-      const ids=p.vehicleIds||[];if(!ids.length)return false;
-      return !ids.every(v=>completedKeys.has(completionKey(p.stationCode||"",v)));
+  function dispatchSourceSnapshot(shift,dispatchSheet,rows){
+    const keyed=(rows||[]).map(row=>{
+      const stationCode=(row.stationRaw.match(/^\d{9}/)||[""])[0];
+      return{key:completionKey(shift,dispatchSheet,stationCode,row.vehicle),completed:row.completed==="已完成"};
     });
-    if(keep.length!==q.length)queueWrite(keep);
+    return{
+      presentKeys:new Set(keyed.map(item=>item.key)),
+      completedKeys:new Set(keyed.filter(item=>item.completed).map(item=>item.key))
+    };
+  }
+  /* 與完成表及各班來源總表對帳；舊分頁也能收斂，不必等使用者切回該班。 */
+  async function reconcileQueue(completedKeys){
+    const q=queueRead();
+    const keep=[];
+    const unresolvedCompletions=new Set();
+    const currentShift=shiftNow();
+    const scopeKey=(shift,sheet)=>`${shift}\u0000${sheet}`;
+    const snapshots=new Map();
+    if(activeDispatchSheet){
+      const source=dispatchSourceSnapshot(currentShift,activeDispatchSheet,dispatchFormRows);
+      snapshots.set(scopeKey(currentShift,activeDispatchSheet),{
+        status:"available",...source
+      });
+    }
+    const missingScopes=new Map();
+    q.forEach(payload=>{
+      const shift=normalizedClientShift(payload&&payload.shift);
+      const sheet=String(payload&&payload.dispatchSheet||(payload&&payload.op==="completeWO"?"派工總表":"")).trim();
+      const key=scopeKey(shift,sheet);
+      if(!sheet||snapshots.has(key)||missingScopes.has(key))return;
+      missingScopes.set(key,{shift,sheet});
+    });
+    await Promise.all([...missingScopes].map(async([key,scope])=>{
+      if(!(SHIFT_DISPATCH_SHEETS[scope.shift]||[]).includes(scope.sheet)){
+        snapshots.set(key,{status:"unknown",presentKeys:new Set(),completedKeys:new Set()});return;
+      }
+      try{
+        const rows=parseDispatchSheetData(await fetchSheetData(dispatchSheetUrl(scope.sheet),"reconcileDispatchSheet",6000));
+        snapshots.set(key,{status:"available",...dispatchSourceSnapshot(scope.shift,scope.sheet,rows)});
+      }catch(error){
+        snapshots.set(key,{status:error&&error.dispatchSheetMissing?"missing":"unknown",presentKeys:new Set(),completedKeys:new Set()});
+      }
+    }));
+    q.forEach(payload=>{
+      const payloadShift=normalizedClientShift(payload&&payload.shift);
+      const payloadSheet=String(payload&&payload.dispatchSheet||(payload&&payload.op==="completeWO"?"派工總表":"")).trim();
+      const snapshot=snapshots.get(scopeKey(payloadShift,payloadSheet))||{status:"unknown",presentKeys:new Set(),completedKeys:new Set()};
+      if(payload&&(payload.op==="completeShiftWO"||payload.op==="completeWO")){
+        const keys=(payload.vehicleIds||[]).map(vehicleId=>completionKey(payload.shift||"早",payload.dispatchSheet,payload.stationCode||"",vehicleId));
+        // 來源列仍存在時必須有完成註記；若 QUERY 已把完成列排除，完成表存在即代表已收斂。
+        const missing=keys.filter(key=>!completedKeys.has(key)||snapshot.status==="unknown"||
+          snapshot.status==="available"&&snapshot.presentKeys.has(key)&&!snapshot.completedKeys.has(key));
+        if(missing.length){keep.push(payload);missing.forEach(key=>unresolvedCompletions.add(key))}
+        return;
+      }
+      if(payload&&payload.op==="undoShiftWO"){
+        const keys=(payload.targets||[]).map(target=>completionKey(payload.shift||"早",payload.dispatchSheet,payload.stationCode||"",target&&target.vehicleId||""));
+        // 完成列消失且總表註記已清除，才視為還原完成。
+        if(keys.some(key=>completedKeys.has(key)||snapshot.status==="unknown"||
+          snapshot.status==="available"&&snapshot.presentKeys.has(key)&&snapshot.completedKeys.has(key)||unresolvedCompletions.has(key)))keep.push(payload);
+        return;
+      }
+      keep.push(payload);
+    });
+    const keepIds=new Set(keep.map(payload=>payload&&payload.qid));
+    q.forEach(payload=>{if(payload&&payload.qid&&!keepIds.has(payload.qid))queueDrop(payload.qid)});
+  }
+  function historyPayloadAfterSync(payload,result,responseOverride){
+    const response=responseOverride||syncResponseByQid.get(payload&&payload.qid);
+    if(result!=="ok"||!response||!Array.isArray(response.ownedVehicleIds))return payload;
+    const owned=new Set(response.ownedVehicleIds.map(value=>String(value||"")));
+    const vehicles=(payload.vehicles||[]).filter(vehicle=>owned.has(String(vehicle&&vehicle.id||"")));
+    return{...payload,vehicles,vehicleIds:vehicles.map(vehicle=>vehicle.id)};
+  }
+  function cancelQueuedCompletions(workKeys,recordIds=[]){
+    const remove=new Set(workKeys);
+    const removeRecords=new Set(recordIds.map(value=>String(value||"")));
+    queueRead().forEach(payload=>{
+      if(!payload||(payload.op!=="completeShiftWO"&&payload.op!=="completeWO"))return;
+      const payloadRecord=String(payload.recordId||payload.id||"");
+      const vehicles=(payload.vehicles||[]).filter(vehicle=>{
+        const sameWork=remove.has(completionKey(payload.shift||"早",payload.dispatchSheet,payload.stationCode||"",vehicle&&vehicle.id||""));
+        const sameEvent=!removeRecords.size||removeRecords.has(payloadRecord);
+        return !(sameWork&&sameEvent);
+      });
+      if(vehicles.length===(payload.vehicles||[]).length)return;
+      if(!vehicles.length){queueDrop(payload.qid);return}
+      const replacement={...payload,vehicles,vehicleIds:vehicles.map(vehicle=>vehicle.id)};
+      replacement.qid=`${replacement.recordId||replacement.id}|${replacement.shift||"早"}|${replacement.stationCode||""}|${replacement.vehicleIds.join(",")}`;
+      queuePut(replacement);
+      if(replacement.qid!==payload.qid)queueDrop(payload.qid);
+    });
+  }
+
+  async function refreshCurrentDispatchData(){
+    const context={version:UI_CONTEXT_VERSION,sessionId:SESSION_ID,employee:empNow(),shift:shiftNow()};
+    const snapshot={zone:zoneNow(),vehicle:document.getElementById("vehicle").value,location:document.getElementById("location").value};
+    const loaded=await loadDispatchFormData();
+    if(context.version!==UI_CONTEXT_VERSION||!userContextIsCurrent(context.sessionId,context.employee,context.shift))return false;
+    document.getElementById("vehicle").value=snapshot.vehicle;
+    document.getElementById("location").value=snapshot.location;
+    if(loaded)ensureZoneValue(snapshot.zone);
+    return loaded;
+  }
+  async function refreshAfterRejected(payload,sessionId,message){
+    if(!userContextIsCurrent(sessionId,payload.employee,payload.shift))return;
+    const loaded=await refreshCurrentDispatchData();
+    if(loaded&&userContextIsCurrent(sessionId,payload.employee,payload.shift))await loadCompletedRecords();
+    if(userContextIsCurrent(sessionId,payload.employee,payload.shift))document.getElementById("dedupeStatus").textContent=message;
   }
 
   function updateSyncBadge(){
@@ -571,102 +1129,302 @@
     const n=queueCount();
     if(n>0){el.innerHTML=`⚠ 待同步 ${n} 筆 <a href="#" id="retrySync" style="color:inherit">重試</a>`;
       const b=document.getElementById("retrySync");
-      if(b)b.onclick=async ev=>{ev.preventDefault();el.textContent="補送中…";
-        const done=await flushQueue();
-        el.textContent=done?`✓ 已補送 ${done} 筆`:`⚠ 待同步 ${queueCount()} 筆`;};
+      if(b)b.onclick=async ev=>{ev.preventDefault();
+        const context={version:UI_CONTEXT_VERSION,mutationVersion:completionMutationVersion,sessionId:SESSION_ID,employee:empNow(),shift:shiftNow()};
+        el.textContent="補送中…";
+        await flushQueue();
+        if(context.version!==UI_CONTEXT_VERSION||!userContextIsCurrent(context.sessionId,context.employee,context.shift))return;
+        if(context.mutationVersion!==completionMutationVersion||completionMutationsInFlight){updateSyncBadge();return}
+        if(await refreshCurrentDispatchData()){
+          if(context.mutationVersion!==completionMutationVersion||completionMutationsInFlight){updateSyncBadge();return}
+          await loadCompletedRecords();
+        }
+        else el.textContent="派工總表同步失敗，登入資料仍保留";};
     }else el.textContent="✓ 已同步";
+  }
+
+  function beginCompletionMutation(){
+    completionMutationsInFlight++;
+    completionMutationVersion++;
+    completedLoadSequence++;
+    document.getElementById("switchProfile").disabled=true;
+    let finished=false;
+    return()=>{
+      if(finished)return;
+      finished=true;
+      completionMutationsInFlight=Math.max(0,completionMutationsInFlight-1);
+      completionMutationVersion++;
+      completedLoadSequence++;
+      if(completionMutationsInFlight===0)document.getElementById("switchProfile").disabled=false;
+    };
   }
 
   async function completeWorkOrder(id,button){
     if(button.disabled)return;
+    const finishMutation=beginCompletionMutation();
+    try{
     button.disabled=true;button.textContent="寫入完成紀錄…";
-    const route=routes.find(item=>item.id===id);
+    const route=visibleRoutes.find(item=>item.id===id);
     if(!route){button.disabled=false;button.textContent="查無此站";return}
     const vehicles=route.vehicles.map(v=>({id:v[0],reason:v[1]||"",dock:v[4]||"",source:v[5]||"",battery:pickBattery(v[1])}));
-    const payload=buildPayload("本站完成",SESSION_ID,route.code,route.station,vehicles);
+    const actionSession=SESSION_ID;
+    const payload=buildPayload("本站完成",completionEventId(),route.code,route.station,vehicles);
     queueAdd(payload);
-    const res=await sendOne(payload);
-    const keys=vehicles.map(v=>completionKey(route.code,v.id));
+    const res=await flushQueuedPayload(payload.qid);
+    if(res==="rejected"||res==="cancelled"){
+      queueDrop(payload.qid);
+      button.disabled=false;button.textContent="完成此站";
+      finishMutation();
+      await refreshAfterRejected(payload,actionSession,"同步被拒絕，已更新最新派工資料");
+      return;
+    }
+    const keys=vehicles.map(v=>completionKey(payload.shift,payload.dispatchSheet,route.code,v.id));
     if(res==="ok"){
       queueDrop(payload.qid);
-      const done=new Set(JSON.parse(localStorage.getItem("maint_completed_vehicles_v2")||"[]"));
+      const done=completedLocalRead();
       keys.forEach(k=>done.add(k));
-      localStorage.setItem("maint_completed_vehicles_v2",JSON.stringify([...done]));
+      completedLocalSave(done);
       button.textContent="已完成並同步";
     }else{
       pendingHideAdd(keys);
       button.textContent=res==="sent"?"已送出（待對帳）":`已完成（待同步 ${queueCount()} 筆）`;
     }
+    const historyPayload=historyPayloadAfterSync(payload,res);
+    if((historyPayload.vehicles||[]).length)addCompletedHistoryFromPayload(historyPayload,res==="ok"?"已同步":"待同步");
     updateSyncBadge();
-    if(route.coords)routeStartPoint=route.coords;
+    if(!payloadContextIsCurrent(payload,actionSession))return;
+    if(route.coords){routeStartPoint=route.coords;routeStartLabel=route.station;saveRouteProgress(route.coords,route.station)}
     visibleRoutes=visibleRoutes.filter(item=>item.id!==id);
-    setTimeout(renderTasks,700);
+    routes=visibleRoutes;
+    updateRouteContext(zoneNow(),routeStartLabel,routeStartPoint,visibleRoutes);
+    setTimeout(()=>{renderTasks();initMap()},700);
+    }finally{finishMutation()}
   }
 
   /* 單台回報:只回報該站其中一台 */
   async function reportSingleVehicle(code,station,bike,reason,button,dock,source){
     if(button.disabled)return;
+    const finishMutation=beginCompletionMutation();
+    try{
     button.disabled=true;button.textContent="回報中…";
     const activeRoute=visibleRoutes.find(r=>r.code===code);
-    const recordId=`${empNow()}-r${Date.now()}`;
+    const actionSession=SESSION_ID;
+    const recordId=completionEventId();
     const payload=buildPayload("單台回報",recordId,code,station,[{id:bike,reason:reason||"",dock:dock||"",source:source||"",battery:pickBattery(reason)}]);
     queueAdd(payload);
-    const res=await sendOne(payload);
-    const key=completionKey(code,bike);
+    const res=await flushQueuedPayload(payload.qid);
+    if(res==="rejected"||res==="cancelled"){
+      queueDrop(payload.qid);
+      button.disabled=false;button.textContent="單台回報";
+      finishMutation();
+      await refreshAfterRejected(payload,actionSession,"同步被拒絕，已更新最新派工資料");
+      return;
+    }
+    const key=completionKey(payload.shift,payload.dispatchSheet,code,bike);
     if(res==="ok"){
       queueDrop(payload.qid);
-      const done=new Set(JSON.parse(localStorage.getItem("maint_completed_vehicles_v2")||"[]"));
+      const done=completedLocalRead();
       done.add(key);
-      localStorage.setItem("maint_completed_vehicles_v2",JSON.stringify([...done]));
+      completedLocalSave(done);
     }else pendingHideAdd([key]);
+    const historyPayload=historyPayloadAfterSync(payload,res);
+    if((historyPayload.vehicles||[]).length)addCompletedHistoryFromPayload(historyPayload,res==="ok"?"已同步":"待同步");
     updateSyncBadge();
-    if(activeRoute&&activeRoute.vehicles.length===1&&activeRoute.coords)routeStartPoint=activeRoute.coords;
+    if(!payloadContextIsCurrent(payload,actionSession))return;
+    if(activeRoute&&activeRoute.vehicles.length===1&&activeRoute.coords){
+      routeStartPoint=activeRoute.coords;routeStartLabel=activeRoute.station;saveRouteProgress(activeRoute.coords,activeRoute.station);
+    }
     visibleRoutes=visibleRoutes.map(r=>{
       if(r.code!==code)return r;
       const vs=r.vehicles.filter(v=>v[0]!==bike);
       return{...r,vehicles:vs,need:vs.length};
     }).filter(r=>r.vehicles.length>0);
-    setTimeout(renderTasks,500);
+    routes=visibleRoutes;
+    updateRouteContext(zoneNow(),routeStartLabel||document.getElementById("location").value,routeStartPoint,visibleRoutes);
+    setTimeout(()=>{renderTasks();initMap()},500);
+    }finally{finishMutation()}
+  }
+  async function undoCompletedTask(item,button){
+    if(!item||button.disabled)return;
+    const finishMutation=beginCompletionMutation();
+    try{
+    const dispatchSheet=item.dispatchSheet||activeDispatchSheet;
+    if(!dispatchSheet){button.textContent="缺少來源總表";return}
+    button.disabled=true;button.textContent="同步還原中…";
+    const actionSession=SESSION_ID;
+    const undoId=`UNDO-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const workOrderId=item.workOrderId||`LOWBAT-${SHIFT_WORK_ORDER_KEY[item.shift]||"EARLY"}-${item.stationCode}`;
+    const payload={
+      op:"undoShiftWO",undoId,id:workOrderId,employee:empNow(),shift:item.shift,
+      dispatchSheet,stationCode:item.stationCode,station:item.station,
+      targets:[{vehicleId:item.vehicleId,completionRecordId:item.recordId}],
+      qid:`undo|${completedHistoryIdentity(item)}`
+    };
+    queueAdd(payload);
+    const result=await flushQueuedPayload(payload.qid);
+    if(result==="rejected"||result==="cancelled"){
+      button.disabled=false;button.textContent="改為未完成";
+      finishMutation();
+      await refreshAfterRejected(payload,actionSession,"還原被拒絕，已更新最新派工資料");
+      return;
+    }
+    if(result!=="ok"){
+      button.textContent="還原待同步";
+      if(payloadContextIsCurrent(payload,actionSession))document.getElementById("dedupeStatus").textContent=`⚠ 待同步 ${queueCount()} 筆`;
+      return;
+    }
+    if(result==="ok"){
+      queueDrop(payload.qid);
+      cancelQueuedCompletions([completedWorkKey(item)],[item.recordId]);
+    }
+    const workKey=completedWorkKey(item);
+    const done=completedLocalRead();done.delete(workKey);completedLocalSave(done);
+    pendingHideDrop([workKey]);
+    removeCompletedHistoryItem(item);
+    if(!payloadContextIsCurrent(payload,actionSession)){updateSyncBadge();return}
+    dispatchFormRows=dispatchFormRows.map(row=>{
+      const stationCode=(row.stationRaw.match(/^\d{9}/)||[""])[0];
+      return stationCode===item.stationCode&&row.vehicle===item.vehicleId?{...row,completed:""}:row;
+    });
+    const hideKeys=new Set([...completedLocalRead(),...pendingHideRead()]);
+    hideKeys.delete(workKey);
+    const reopenedKeys=new Set([workKey]);
+    routes=buildZoneRoutes(zoneNow(),routeStartPoint,hideKeys,reopenedKeys);
+    visibleRoutes=lowBatteryOnly(routes);
+    updateRouteContext(zoneNow(),routeStartLabel||document.getElementById("location").value,routeStartPoint,visibleRoutes);
+    renderTasks();renderCompletedTasks();updateSyncBadge();initMap();
+    }finally{finishMutation()}
   }
   function show(view){
     const login=view==="login";
+    const dashboard=view==="dashboard";
+    document.getElementById("loadingView").classList.toggle("hidden",view!=="loading");
     document.getElementById("loginView").classList.toggle("hidden",!login);
-    document.getElementById("dashboardView").classList.toggle("hidden",login);
-    if(!login)setTimeout(()=>{initMap();map&&map.invalidateSize()},80);
+    document.getElementById("dashboardView").classList.toggle("hidden",!dashboard);
+    if(dashboard)setTimeout(()=>{initMap();map&&map.invalidateSize()},80);
     window.scrollTo({top:0,behavior:"instant"});
   }
-  document.getElementById("startBtn").onclick=()=>{
-    const employee=document.getElementById("employee").value.trim();
-    const zone=document.getElementById("zone").value;
-    const vehicle=document.getElementById("vehicle").value.trim();
-    const location=document.getElementById("location").value.trim();
-    if(!employee||!zone||!vehicle||!location){document.getElementById("formError").textContent="請完成所有必填欄位";return}
+  function setLoadingState(error,message){
+    const view=document.getElementById("loadingView");
+    view.classList.toggle("is-error",Boolean(error));
+    document.getElementById("loadingTitle").textContent=error?"派工資料同步失敗":"同步最新派工資料";
+    document.getElementById("loadingMessage").textContent=message||(error?"請重新同步":"請稍候…");
+  }
+  function taipeiLocationTime(value){
+    const date=new Date(String(value||""));
+    return Number.isNaN(date.getTime())?"":date.toLocaleString("zh-TW",{timeZone:"Asia/Taipei",hour12:false});
+  }
+  function ensureZoneValue(zone){
+    const select=document.getElementById("zone");
+    if(zone&&![...select.options].some(option=>option.value===zone)){
+      const option=document.createElement("option");
+      option.value=zone;option.textContent=`${zone}｜${ZONE_INFO[zone]||zone}`;
+      select.appendChild(option);
+    }
+    select.value=zone||"";
+    buildStationList();
+  }
+  async function openDispatchDashboard(profile,restoring=false){
+    const employee=String(profile.employee||"").trim();
+    const shift=String(profile.shift||"").trim();
+    const zone=String(profile.zone||"").trim();
+    const vehicle=String(profile.vehicle||"").trim();
+    const location=String(profile.location||"").trim();
+    if(!employee||!shift||!zone||!vehicle||!location){return false}
     document.getElementById("profileName").textContent=employee;
     document.getElementById("avatar").textContent=employee.slice(0,2).toUpperCase();
-    document.getElementById("profileMeta").textContent=`${zone} · ${vehicle}`;
-    document.getElementById("profileShift").textContent=document.getElementById("shift").value;
-    const startPoint=resolveStartPoint(location,zone);
-    if(!startPoint){document.getElementById("formError").textContent="目前地點無法辨識，請選擇該分區場站或輸入緯度,經度";return}
-    SESSION_ID=`${employee}-${Date.now()}`;
+    const positionNotice=profile.positionNotice?` · ${profile.positionNotice}`:"";
+    document.getElementById("profileMeta").textContent=`${shift} · ${zone} · ${vehicle}${positionNotice}`;
+    document.getElementById("profileShift").textContent=shift;
+    document.getElementById("feedOnline").textContent=`${shift}班派工`;
+    const startPoint=resolveStartPoint(location,zone)||parseCoords(profile.startPoint);
+    if(!startPoint)return false;
+    show("loading");
+    UI_CONTEXT_VERSION++;
+    SESSION_ID=profile.sessionId||`${employee}-${shift}-${Date.now()}`;
     routes=buildZoneRoutes(zone,startPoint);
     visibleRoutes=lowBatteryOnly(routes);
     updateRouteContext(zone,location,startPoint);
     renderTasks();
-    loadCompletedRecords();
+    loginSessionSave({employee,shift,zone,vehicle,location,startPoint:startPoint.join(","),locatedAt:profile.locatedAt||"",accuracy:profile.accuracy||0,sessionId:SESSION_ID,dispatchSheet:activeDispatchSheet||profile.dispatchSheet||""});
+    await loadCompletedRecords();
     show("dashboard");
-  };
+    return true;
+  }
+  document.getElementById("dispatchLoginForm").addEventListener("submit",async event=>{
+    event.preventDefault();
+    const profile={
+      employee:document.getElementById("employee").value.trim(),
+      shift:document.getElementById("shift").value,
+      zone:document.getElementById("zone").value,
+      vehicle:document.getElementById("vehicle").value.trim(),
+      location:document.getElementById("location").value.trim()
+    };
+    if(!activeDispatchSheet||activeDispatchShift!==profile.shift||!await openDispatchDashboard(profile)){
+      document.getElementById("formError").textContent="請完成所有必填欄位，並確認目前地點可辨識";
+    }
+  });
+  document.getElementById("shift").addEventListener("change",loadDispatchFormData);
   document.getElementById("zone").addEventListener("change",buildStationList);
-  document.getElementById("locateBtn").onclick=()=>{
+  document.getElementById("locateBtn").onclick=async()=>{
     const button=document.getElementById("locateBtn");
     if(!navigator.geolocation){document.getElementById("formError").textContent="此裝置不支援定位";return}
     button.textContent="定位中…";
-    navigator.geolocation.getCurrentPosition(position=>{
-      const lat=position.coords.latitude.toFixed(5),lng=position.coords.longitude.toFixed(5);
-      document.getElementById("location").value=`${lat},${lng}`;button.textContent="✓ 已定位";
-    },()=>{button.textContent="📍 定位";document.getElementById("formError").textContent="定位失敗，請輸入場站名稱或座標"},{enableHighAccuracy:true,timeout:10000});
+    const position=await latestDevicePosition();
+    if(position.point){
+      document.getElementById("location").value=position.point.map(value=>value.toFixed(5)).join(",");
+      button.textContent="✓ 已定位";document.getElementById("formError").textContent="";
+    }else{
+      button.textContent="📍 定位";document.getElementById("formError").textContent="定位失敗，請輸入場站名稱或座標";
+    }
   };
+  document.getElementById("completedSearch").addEventListener("input",renderCompletedTasks);
+  document.getElementById("switchProfile").addEventListener("click",()=>{
+    if(completionMutationsInFlight){
+      document.getElementById("dedupeStatus").textContent="請等待目前同步完成後再切換帳號 / 班別";
+      return;
+    }
+    UI_CONTEXT_VERSION++;
+    SESSION_ID="";
+    dispatchLoadSequence++;
+    completedLoadSequence++;
+    show("login");
+    loadDispatchFormData();
+  });
   setInterval(()=>document.getElementById("clock").textContent=new Date().toLocaleTimeString("zh-TW",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit"}),1000);
-  renderTasks();loadCompletedRecords();loadDispatchFormData();show("login");
+  async function initializeApp(){
+    setLoadingState(false,"請稍候…");
+    show("loading");
+    const saved=loginSessionRead();
+    if(saved){
+      document.getElementById("employee").value=saved.employee||"";
+      document.getElementById("shift").value=saved.shift||"早";
+    }
+    const positionPromise=saved?latestDevicePosition():Promise.resolve({point:null});
+    const [dispatchLoaded,latestPosition]=await Promise.all([loadDispatchFormData(),positionPromise]);
+    if(!saved){show("login");return}
+    if(!dispatchLoaded||!activeDispatchSheet||activeDispatchShift!==saved.shift){
+      setLoadingState(true,`${saved.shift||"早"}班總表目前無法讀取；登入資料仍保留。`);
+      return;
+    }
+    const restored={...saved};
+    if(latestPosition.point){
+      restored.startPoint=latestPosition.point.join(",");
+      restored.location=latestPosition.point.map(value=>value.toFixed(5)).join(",");
+      restored.locatedAt=latestPosition.locatedAt||new Date().toISOString();
+      restored.accuracy=latestPosition.accuracy||0;
+      restored.positionNotice="";
+    }else{
+      const lastTime=taipeiLocationTime(restored.locatedAt);
+      restored.positionNotice=lastTime?`定位失敗，沿用 ${lastTime} 位置`:`定位失敗，沿用上次位置`;
+    }
+    document.getElementById("vehicle").value=restored.vehicle||"";
+    document.getElementById("location").value=restored.location||"";
+    ensureZoneValue(restored.zone||"");
+    if(!await openDispatchDashboard(restored,true))show("login");
+  }
+  document.getElementById("retryLoad").addEventListener("click",initializeApp);
+  renderTasks();initializeApp();
 </script>
 </body>
 </html>
