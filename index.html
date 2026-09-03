@@ -186,9 +186,9 @@
   const COMPLETION_SHEET_URL="https://docs.google.com/spreadsheets/d/1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo/gviz/tq?headers=1&sheet=%E7%B6%AD%E4%BF%AE%E5%AE%8C%E6%88%90%E7%B4%80%E9%8C%84";
   const DISPATCH_SHEET_BASE_URL="https://docs.google.com/spreadsheets/d/1Se-0yDne1QuyR15--iBPm0oCZjnVahb-SI0LdJM9kPo/gviz/tq";
   const SHIFT_DISPATCH_SHEETS=Object.freeze({
-    早:["早班派工總表","早派工總表","早班總表","早班","早","派工總表"],
-    晚:["晚班派工總表","晚派工總表","晚班總表","晚班","晚"],
-    夜:["夜班派工總表","夜派工總表","大夜班派工總表","夜班總表","夜班","夜"]
+    早:["派工總表(早)","早班派工總表","早派工總表","早班總表","早班","早","派工總表"],
+    晚:["派工總表(晚)","晚班派工總表","晚派工總表","晚班總表","晚班","晚"],
+    夜:["派工總表(夜)","夜班派工總表","夜派工總表","大夜班派工總表","夜班總表","夜班","夜"]
   });
   const SHIFT_WORK_ORDER_KEY=Object.freeze({早:"EARLY",晚:"LATE",夜:"NIGHT"});
   const ZONE_INFO={G1:"中和區",G2:"永和區",K1:"板橋區",K2:"土城區",B0:"台大校內外",B1:"大安區",B2:"文山區",J:"新店分區",C1:"大同區",D1:"萬華區",D2:"中正區",H:"蘆洲區（五股）",H1:"三重區",H2:"林口分區",E1:"士林區",E2:"北投區",L:"淡水分區",A2:"南港區",F:"七星分區",N:"瑞芳分區",C2:"中山區",A3:"內湖區",A1:"信義區",C3:"松山區",I:"新莊區",M:"樹三鶯區"};
@@ -436,6 +436,7 @@
   /* 表頭名稱可能有多種寫法,取第一個找到的 */
   function pickCol(labels,names){
     for(const n of names){const i=labels.indexOf(n);if(i>=0)return i}
+    for(const n of names){const i=labels.findIndex(label=>String(label||"").trim().endsWith(n));if(i>=0)return i}
     return -1;
   }
   /* 電量包在原因字串裡(例:14%2.0E低電量禁用)→ 抽出 "14%" */
@@ -481,9 +482,9 @@
     }
     const labels=(data.table.cols||[]).map(col=>String(col.label||"").trim());
     const indexes={
-      vehicle:labels.indexOf("車號"),station:labels.indexOf("鎖車場站"),
-      reason:labels.indexOf("維修通報原因"),coords:labels.indexOf("座標"),
-      zone:labels.indexOf("區域代號"),completed:labels.indexOf("完成註記"),
+      vehicle:pickCol(labels,["車號"]),station:pickCol(labels,["鎖車場站"]),
+      reason:pickCol(labels,["維修通報原因"]),coords:pickCol(labels,["座標"]),
+      zone:pickCol(labels,["區域代號"]),completed:pickCol(labels,["完成註記"]),
       dock:pickCol(labels,["柱號","主柱號","鎖柱號","主鎖柱號","柱位"]),
       source:pickCol(labels,["來源"]),
       district:pickCol(labels,["分區"])

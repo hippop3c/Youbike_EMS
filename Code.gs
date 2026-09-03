@@ -23,9 +23,9 @@ var COMPLETION_SHEET_NAME = '維修完成紀錄';
 var UNDO_SHEET_NAME = '維修撤銷紀錄';
 var DISPATCH_SHEET_NAME = '派工總表';
 var SHIFT_DISPATCH_SHEETS = {
-  '早': ['早班派工總表', '早派工總表', '早班總表', '早班', '早', DISPATCH_SHEET_NAME],
-  '晚': ['晚班派工總表', '晚派工總表', '晚班總表', '晚班', '晚'],
-  '夜': ['夜班派工總表', '夜派工總表', '大夜班派工總表', '夜班總表', '夜班', '夜']
+  '早': ['派工總表(早)', '早班派工總表', '早派工總表', '早班總表', '早班', '早', DISPATCH_SHEET_NAME],
+  '晚': ['派工總表(晚)', '晚班派工總表', '晚派工總表', '晚班總表', '晚班', '晚'],
+  '夜': ['派工總表(夜)', '夜班派工總表', '夜派工總表', '大夜班派工總表', '夜班總表', '夜班', '夜']
 };
 var SHIFT_WORK_ORDER_KEY = { '早': 'EARLY', '晚': 'LATE', '夜': 'NIGHT' };
 var COMPLETION_HEADERS = [
