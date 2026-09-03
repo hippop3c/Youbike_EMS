@@ -64,9 +64,10 @@
     .feed-main b{display:block;font-size:.78rem}.feed-main span{font-size:.68rem;color:var(--muted)}
     .feed-distance{font-size:.68rem;font-weight:800;color:var(--blue)}
     .map-card{padding:0;overflow:hidden}
-    .map-title{display:flex;justify-content:space-between;align-items:center;padding:12px 14px}
-    .map-title b{font-size:.85rem}.map-title span{font-size:.68rem;color:var(--muted)}
+    .map-title{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px}
+    .map-title b{font-size:.85rem}.map-title span{font-size:.68rem;color:var(--muted)}.map-title-tools{display:flex;align-items:center;gap:8px}.map-expand{border:1px solid var(--ink);border-radius:8px;background:#fff;color:var(--ink);padding:5px 8px;font-size:.68rem;font-weight:900;white-space:nowrap}
     #map{height:260px;background:#e9e6dc}
+    .map-card:fullscreen,.map-card.map-expanded{display:flex;flex-direction:column;width:100%;height:100%;margin:0;border:0;border-radius:0;background:#fff}.map-card:fullscreen #map,.map-card.map-expanded #map{flex:1;height:auto;min-height:0}.map-card.map-expanded{position:fixed;inset:0;z-index:1200}.map-card:fullscreen .route-actions,.map-card.map-expanded .route-actions{max-height:24vh;overflow:auto}.map-expanded-open{overflow:hidden}
     .route-summary{padding:10px 14px;font-size:.72rem;font-weight:700;background:#faf8f0;border-top:1px solid var(--line)}
     .route-actions{display:grid;gap:8px;padding:0 14px 14px;background:#faf8f0}
     .route-actions a{display:flex;align-items:center;justify-content:center;min-height:44px;border-radius:10px;background:var(--blue);color:#fff;text-decoration:none;font-size:.78rem;font-weight:900}
@@ -165,7 +166,7 @@
       </div>
 
       <div class="card map-card">
-        <div class="map-title"><b>距離優先派工路線</b><span id="mapStationCount">近 → 遠 · 共 0 站</span></div>
+        <div class="map-title"><b>距離優先派工路線</b><div class="map-title-tools"><span id="mapStationCount">近 → 遠 · 共 0 站</span><button class="map-expand" id="mapExpandBtn" type="button">⛶ 全螢幕</button></div></div>
         <div id="map"></div>
         <div class="route-summary" id="routeSummary">尚未建立路線</div>
         <div class="route-actions" id="googleRouteLinks"></div>
@@ -297,6 +298,40 @@
       marker.bindTooltip(i?String(i):"起",{permanent:true,direction:"center",className:"route-marker"});
     });
     if(routePoints.length>1)map.fitBounds(routePoints,{padding:[25,25]});
+  }
+  function mapIsFullscreen(){
+    const card=document.querySelector(".map-card");
+    return Boolean(document.fullscreenElement===card||document.webkitFullscreenElement===card||card.classList.contains("map-expanded"));
+  }
+  function updateMapFullscreenButton(){
+    const button=document.getElementById("mapExpandBtn");
+    if(button)button.textContent=mapIsFullscreen()?"✕ 關閉全螢幕":"⛶ 全螢幕";
+    setTimeout(()=>{if(map)map.invalidateSize()},150);
+  }
+  async function toggleMapFullscreen(){
+    const card=document.querySelector(".map-card");
+    const nativeActive=document.fullscreenElement===card||document.webkitFullscreenElement===card;
+    if(nativeActive){
+      const exit=document.exitFullscreen||document.webkitExitFullscreen;
+      if(exit){const result=exit.call(document);if(result&&typeof result.then==="function")await result}
+    }else if(card.classList.contains("map-expanded")){
+      card.classList.remove("map-expanded");
+      document.body.classList.remove("map-expanded-open");
+    }else{
+      const request=card.requestFullscreen||card.webkitRequestFullscreen;
+      if(request){
+        try{
+          const result=request.call(card);if(result&&typeof result.then==="function")await result;
+        }catch(error){
+          card.classList.add("map-expanded");
+          document.body.classList.add("map-expanded-open");
+        }
+      }else{
+        card.classList.add("map-expanded");
+        document.body.classList.add("map-expanded-open");
+      }
+    }
+    updateMapFullscreenButton();
   }
   function parseCoords(value){
     const parts=String(value||"").split(",").map(Number);
@@ -1405,6 +1440,15 @@
     }
   };
   document.getElementById("completedSearch").addEventListener("input",renderCompletedTasks);
+  document.getElementById("mapExpandBtn").addEventListener("click",toggleMapFullscreen);
+  document.addEventListener("fullscreenchange",updateMapFullscreenButton);
+  document.addEventListener("webkitfullscreenchange",updateMapFullscreenButton);
+  document.addEventListener("keydown",event=>{
+    const card=document.querySelector(".map-card");
+    if(event.key==="Escape"&&card.classList.contains("map-expanded")){
+      card.classList.remove("map-expanded");document.body.classList.remove("map-expanded-open");updateMapFullscreenButton();
+    }
+  });
   document.getElementById("switchProfile").addEventListener("click",()=>{
     if(completionMutationsInFlight){
       document.getElementById("dedupeStatus").textContent="請等待目前同步完成後再切換帳號 / 班別";
