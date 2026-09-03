@@ -1215,6 +1215,9 @@
     const historyPayload=historyPayloadAfterSync(payload,res);
     if((historyPayload.vehicles||[]).length)addCompletedHistoryFromPayload(historyPayload,res==="ok"?"已同步":"待同步");
     updateSyncBadge();
+    if(res==="ok"&&!(historyPayload.vehicles||[]).length){
+      document.getElementById("dedupeStatus").textContent="此站已由其他同仁完成，已更新派工清單";
+    }
     if(!payloadContextIsCurrent(payload,actionSession))return;
     if(route.coords){routeStartPoint=route.coords;routeStartLabel=route.station;saveRouteProgress(route.coords,route.station)}
     visibleRoutes=visibleRoutes.filter(item=>item.id!==id);
