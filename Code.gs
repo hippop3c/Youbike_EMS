@@ -11,7 +11,7 @@ var MAX_ZONE_ACTS = 200;
 var ACT_TTL_MS = 12 * 60 * 60 * 1000;
 var MAX_COMPLETED = 5000;
 var MAX_ASSIGNMENT_ITEMS = 5;
-var APP_VERSION = 'v2';
+var APP_VERSION = 'v3';
 var TAIPEI_TIME_ZONE = 'Asia/Taipei';
 var SHEET_TIMESTAMP_FORMAT = 'yyyy-mm-dd hh:mm:ss.000';
 
@@ -442,7 +442,7 @@ function appendCompletionRecords_(body, workOrderId, completedAt, vehicles) {
     setByHeader_(row, index, '場站代碼', String(body.stationCode || ''));
     setByHeader_(row, index, '場站名稱', String(body.station || ''));
     setByHeader_(row, index, '自行車號', String(vehicle && vehicle.id || ''));
-    setByHeader_(row, index, '維修原因', String(vehicle && vehicle.reason || '低電量禁用'));
+    setByHeader_(row, index, '維修原因', String(vehicle && vehicle.reason || '低電量'));
     setByHeader_(row, index, '班別', String(body.shift || ''));
     setByHeader_(row, index, '派工總表', String(body.dispatchSheet || ''));
     setByHeader_(row, index, '工單編號', workOrderId);
@@ -1067,7 +1067,7 @@ function isLowBatteryDisabled_(item) {
     });
   }
   return reasons.some(function (reason) {
-    return String(reason || '').indexOf('低電量禁用') !== -1;
+    return String(reason || '').indexOf('低電量') !== -1;
   });
 }
 
